@@ -1,0 +1,25 @@
+# HexStrike AI - UI backend / orchestrator runtime
+# Recommended: Python 3.11 or 3.12 in a virtual environment.
+# Install from UI/backend:
+#   python -m pip install -r requirements.txt
+
+# Flask + Socket.IO Web backend
+Flask>=3.0,<4
+Flask-SocketIO>=5.3,<6
+Flask-Cors>=4.0,<6
+python-socketio>=5.10,<6
+
+# LLM HTTP client and MCP STDIO client/server bridge
+requests>=2.31,<3
+mcp>=1.0,<2
+
+# GraphRAG optimizer imported by orchestrator_demo.py
+numpy>=1.26,<3
+
+# LangGraph Web Skill and planned multi-agent supervisor runtime
+langgraph>=0.2,<2
+langchain>=0.2,<2
+
+# Optional alternative async runtime. app.py currently uses async_mode='threading',
+# therefore eventlet is not required for the current startup path.
+# eventlet>=0.35,<1

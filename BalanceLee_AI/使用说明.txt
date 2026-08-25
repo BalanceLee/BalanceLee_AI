@@ -1,0 +1,19 @@
+1、将 server.py、GraphRAG/、requirements-kali*.txt、kali-tools.json、scripts/ 放到 Kali 项目目录。
+   依赖与工具安装/更新说明见 DEPENDENCIES.md。
+   推荐先检查：python3 scripts/check_kali_dependencies.py --profiles core,web
+   服务启动：.venv-kali/bin/python server.py --port 8888
+2、配置llm环境变量：
+# 在 Windows PowerShell 中（当前终端会话）
+$env:LLM_API_KEY = "sk-xxxxx"
+$env:LLM_API_BASE_URL = "xxxxx"
+$env:LLM_MODEL = "qwen3-max"   # 具体名称以百炼控制台模型 ID 为准
+$env:HEXSTRIKE_SERVER_URL = "http://<KALI_IP>:8888"
+$env:HEXSTRIKE_MCP_AUTOSTART = "0"  # 内部客户端按调用启动 MCP，避免重复常驻
+
+然后在根目录统一启动 Web UI（不需要单独启动前端/后端/CLI）：
+python run.py --build-ui   （首次或前端变更后）
+python run.py              （后续启动）
+浏览器访问：http://localhost:5000
+
+可选无头 CLI：
+python run.py --headless --server-url http://xxxxxx:8888

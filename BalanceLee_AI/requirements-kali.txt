@@ -1,0 +1,33 @@
+# HexStrike AI - Kali Python runtime
+# Recommended: Kali rolling + Python 3.11 or 3.12 in a virtual environment.
+# Do not install into Kali's system Python. Use:
+#   python3 -m venv .venv
+#   source .venv/bin/activate
+#   python -m pip install --upgrade pip setuptools wheel
+#   python -m pip install -r requirements-kali.txt
+#
+# Security CLI tools (nmap/sqlmap/nuclei/...) are NOT Python packages and are
+# listed separately in kali-tools.json.
+
+# Core HTTP API runtime used by server.py
+Flask>=3.0,<4
+requests>=2.31,<3
+aiohttp>=3.9,<4
+psutil>=5.9,<8
+beautifulsoup4>=4.12,<5
+
+# Browser and interception modules are imported at server startup.
+selenium>=4.20,<5
+mitmproxy>=10.3,<13
+
+# Web Skill orchestration and GraphRAG optimizer
+langgraph>=0.2,<2
+numpy>=1.26,<3
+
+# Browser routes import this lazily. After installation run:
+#   python -m playwright install chromium
+playwright>=1.45,<2
+
+# Optional heavy CTF/reverse-engineering modules are split into:
+#   requirements-kali-optional.txt
+# Install them only when those routes are needed.

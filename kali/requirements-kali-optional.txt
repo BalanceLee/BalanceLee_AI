@@ -1,0 +1,6 @@
+# Optional heavy Python dependencies for Kali-side CTF/reverse engineering.
+# Install only when the corresponding HexStrike routes are required:
+#   python -m pip install -r requirements-kali-optional.txt
+
+pwntools>=4.12,<5
+angr>=9.2,<10

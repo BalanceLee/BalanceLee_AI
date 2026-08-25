@@ -1,0 +1,121 @@
+{
+  "schema_version": "1.0",
+  "description": "External security-tool manifest for the Kali-side HexStrike server. Tools are checked by command name; install only the profiles you actually use.",
+  "profiles": {
+    "core": [
+      "nmap", "gobuster", "dirb", "nikto", "sqlmap", "hydra", "john", "hashcat",
+      "curl", "file", "strings", "xxd"
+    ],
+    "web": [
+      "ffuf", "feroxbuster", "dirsearch", "wfuzz", "wafw00f", "wpscan",
+      "nuclei", "dalfox", "httpx", "katana", "hakrawler", "gau",
+      "waybackurls", "arjun", "paramspider", "x8", "jaeles", "xsser",
+      "dotdotpwn", "whatweb", "zaproxy", "burpsuite"
+    ],
+    "network_ad": [
+      "rustscan", "masscan", "autorecon", "nbtscan", "arp-scan", "responder",
+      "nxc", "enum4linux-ng", "rpcclient", "enum4linux", "smbmap", "evil-winrm"
+    ],
+    "password": [
+      "medusa", "patator", "hash-identifier", "ophcrack", "hashcat-utils"
+    ],
+    "binary_reverse": [
+      "gdb", "radare2", "binwalk", "ROPgadget", "checksec", "objdump",
+      "analyzeHeadless", "one_gadget", "ropper", "pwninit"
+    ],
+    "forensics": [
+      "vol.py", "vol", "steghide", "hashpump", "foremost", "exiftool",
+      "photorec", "testdisk", "scalpel", "bulk_extractor", "zsteg", "outguess"
+    ],
+    "cloud_container": [
+      "prowler", "scout", "trivy", "kube-hunter", "kube-bench", "checkov",
+      "terrascan", "falco", "clair"
+    ],
+    "osint": [
+      "amass", "subfinder", "fierce", "dnsenum", "theHarvester", "sherlock",
+      "recon-ng", "spiderfoot", "shodan", "censys"
+    ],
+    "exploitation": [
+      "msfconsole", "msfvenom", "searchsploit"
+    ],
+    "wireless": [
+      "kismet", "wireshark", "tshark", "tcpdump", "airmon-ng", "airodump-ng",
+      "aireplay-ng", "aircrack-ng"
+    ]
+  },
+  "apt_packages": {
+    "core": [
+      "nmap", "gobuster", "dirb", "nikto", "sqlmap", "hydra", "john", "hashcat",
+      "curl", "file", "binutils", "xxd", "wordlists"
+    ],
+    "web": [
+      "ffuf", "feroxbuster", "dirsearch", "wfuzz", "wafw00f", "wpscan",
+      "whatweb", "zaproxy", "burpsuite", "dotdotpwn"
+    ],
+    "network_ad": [
+      "masscan", "nbtscan", "arp-scan", "responder", "enum4linux", "smbmap"
+    ],
+    "password": [
+      "medusa", "patator", "hash-identifier", "ophcrack", "hashcat-utils"
+    ],
+    "binary_reverse": [
+      "gdb", "radare2", "binwalk", "checksec", "binutils", "ghidra"
+    ],
+    "forensics": [
+      "steghide", "foremost", "libimage-exiftool-perl", "testdisk", "scalpel",
+      "bulk-extractor", "outguess"
+    ],
+    "osint": [
+      "amass", "fierce", "dnsenum", "theharvester", "recon-ng", "maltego",
+      "spiderfoot"
+    ],
+    "exploitation": [
+      "metasploit-framework", "exploitdb"
+    ],
+    "wireless": [
+      "kismet", "wireshark", "tshark", "tcpdump", "aircrack-ng"
+    ]
+  },
+  "external_install_notes": {
+    "nuclei": "ProjectDiscovery binary; install from the official release or Go module. Keep nuclei templates updated separately.",
+    "httpx": "Use ProjectDiscovery httpx, not the unrelated Python package with the same name.",
+    "katana": "ProjectDiscovery binary; install from official releases or Go.",
+    "subfinder": "ProjectDiscovery binary; install from official releases or Go.",
+    "dalfox": "Install from the official GitHub release or Go module.",
+    "gau": "Install from the official GitHub release or Go module.",
+    "waybackurls": "Install from the official GitHub release or Go module.",
+    "arjun": "Prefer pipx or an isolated Python virtual environment.",
+    "paramspider": "Prefer pipx or the official GitHub repository.",
+    "autorecon": "Prefer pipx or the Kali package when available.",
+    "nxc": "NetExec; use the current official package/repository. The legacy crackmapexec command is not used here.",
+    "evil-winrm": "Ruby gem or Kali package.",
+    "ROPgadget": "Installed by the Python package ROPGadget; command name is case-sensitive.",
+    "one_gadget": "Ruby gem one_gadget.",
+    "pwninit": "Install the Rust binary from official releases/cargo.",
+    "vol.py": "Volatility 3; install in an isolated environment or from the official repository.",
+    "zsteg": "Ruby gem zsteg.",
+    "prowler": "Install from official Prowler releases/pipx; configure cloud credentials separately.",
+    "scout": "ScoutSuite; install in an isolated Python environment.",
+    "trivy": "Aqua Security repository or official binary release.",
+    "kube-hunter": "Prefer pipx or official container image.",
+    "kube-bench": "Official binary/repository; requires cluster access.",
+    "checkov": "Prefer pipx or official container image.",
+    "terrascan": "Official binary release.",
+    "falco": "Install through the official Falco repository; kernel/eBPF support may be required.",
+    "clair": "Normally deployed as a service/container, not a single Kali CLI.",
+    "shodan": "Install shodan CLI using pipx and configure an API key.",
+    "censys": "Install censys CLI using pipx and configure API credentials."
+  },
+  "maintenance": {
+    "kali_os": [
+      "sudo apt update",
+      "sudo apt full-upgrade"
+    ],
+    "nuclei_templates": [
+      "nuclei -update",
+      "nuclei -update-templates"
+    ],
+    "projectdiscovery": "Update official binaries together and rerun scripts/check_kali_dependencies.py.",
+    "warning": "Do not blindly auto-upgrade every security tool before an engagement. Record versions, test in the lab, then promote the known-good environment."
+  }
+}

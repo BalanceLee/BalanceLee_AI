@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (safety)
+node_modules/
+dist/
+build/
+npm-debug.log*
+
+# WorkBuddy project data (local only)
+.workbuddy/
+
+# Logs
+*.log

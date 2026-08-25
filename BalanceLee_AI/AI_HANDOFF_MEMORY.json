@@ -1,0 +1,502 @@
+{
+  "schema": "hexstrike-ai-handoff-memory",
+  "schema_version": "1.0.0",
+  "generated_at": "2026-08-21T16:22:46+08:00",
+  "language": "zh-CN",
+  "purpose": "供更换设备或更换 AI 后继续开发 HexStrike AI。新 AI 应先完整读取此文件，再读取 referenced_files 中的源码和文档，不得仅凭 README 推断实现状态。",
+  "project": {
+    "name": "HexStrike AI",
+    "current_root": "/Users/balancelee/Downloads/hexstrike-ai-master/hexstrike-ai-master",
+    "portable_root_hint": "换设备后把 current_root 替换为仓库实际根目录，其余相对路径不变。",
+    "owner_goal": "把当前单主 Agent + 领域 Skill 的平台逐步改造成能真实运行、可跨会话恢复、有统一消息协议的 Manager-Observer-Solver 多智能体渗透测试平台。",
+    "authorized_use_only": true,
+    "primary_language": "Python",
+    "frontend": "React + Vite",
+    "web_backend": "Flask + Flask-SocketIO",
+    "tool_protocol": "FastMCP / MCP STDIO bridge -> Kali HTTP API"
+  },
+  "user_requirements_and_preferences": [
+    "所有新增能力必须先确保能跑通，不能只写架构空壳。",
+    "不同渗透工具返回格式不同，必须保留原始结果，并通过适配器统一公共字段。",
+    "前后端正式运行只使用一个 Web 入口，不要求同时手工启动 Vite、Flask 和 CLI。",
+    "CLI 只能作为可选 headless 入口，不是 Web 中转层。",
+    "Kali 工具服务保持独立高权限执行端，默认不由 Web 进程自动拉起。",
+    "简历不得把未实现的多 Agent、Observer、MAB 闭环写成已完成。",
+    "共享状态优先使用 JSON 分文件 + Repository 抽象，不强制 SQLite。",
+    "Solver 按攻击领域划分，不按侦察/发现/利用/报告阶段拆分。",
+    "先串行 handoff，稳定后再开放最多 2-3 个 Solver 有限并行。",
+    "旧代码不能一次性全删，采用 Strangler 渐进迁移，回归通过后再删除冗余。"
+  ],
+  "current_architecture": {
+    "runtime_topology": [
+      "浏览器 -> 同源 React/Socket.IO :5000",
+      "Flask unified Web app -> OrchestratorWrapper",
+      "OrchestratorWrapper -> LLMClient 或 ToolGateway",
+      "ToolGateway -> HexstrikeMcpClient",
+      "HexstrikeMcpClient -> 按调用启动 hexstrike_mcp.py STDIO",
+      "hexstrike_mcp.py -> HTTP -> Kali server.py:8888",
+      "Kali server.py -> nmap/sqlmap/nuclei/dalfox/browser 等工具"
+    ],
+    "persistent_processes": [
+      "Kali: server.py:8888",
+      "UI host: python run.py -> Flask + React static + Socket.IO:5000"
+    ],
+    "optional_processes": [
+      "Vite:5173 仅前端开发模式",
+      "python run.py --headless 仅可选终端模式"
+    ],
+    "important_boundary": "当前 Web UI 不依赖 CLI 中转。MCP 仍为每次调用临时启动 STDIO 子进程，持久 MCP SessionManager 尚未实现。"
+  },
+  "verified_original_capabilities": {
+    "mcp_tools": {
+      "tool_decorator_count": 166,
+      "status": "真实存在，但有重复定义和图谱覆盖不完整风险"
+    },
+    "knowledge_graph": {
+      "tool_nodes": 145,
+      "scenario_nodes": 40,
+      "target_nodes": 16,
+      "phase_nodes": 6,
+      "total_nodes": 207,
+      "edges": 556,
+      "accurate_name": "图引导工具路由 / Knowledge-Graph-Guided Tool Routing",
+      "not_full_graphrag_reason": "没有文档 ingestion、embedding、向量召回、子图证据检索和引用生成。"
+    },
+    "phase_aware": "已存在执行结果更新上下文和工具重选逻辑，CLI 路径较完整。",
+    "mab": "UCB、epsilon-greedy、Thompson Sampling 和奖励函数已实现，但 update_performance 未接入执行链、状态未持久化。",
+    "path_learning": "record_path_execution 存在但未接入，历史路径包含 mock 数据。",
+    "shared_state": "Idea Board + Memory Board 的 JsonStateStore 已实现并独立测试，但尚未由 runtime_event 自动写入。",
+    "multi_agent": "Manager-Observer-Solver 尚未实现；当前是单主 LLM Agent + 固定领域 Skill 工作流。",
+    "observer_harness": "Efficiency Reminder、Steer Reminder、Ralph-Loop、三层 Context Compaction 均未实现。"
+  },
+  "completed_changes": [
+    {
+      "phase": "shared_state_prototype",
+      "status": "completed_module_not_integrated",
+      "files": [
+        "user_server/shared_state.py"
+      ],
+      "details": [
+        "SharedStateStore 抽象接口。",
+        "JsonStateStore JSON 分文件实现。",
+        "Idea 状态 Pending/Testing/Verified/Failed。",
+        "Memory 类型 Evidence/FailureBoundary/Hint/Constraint。",
+        "threading.RLock + 临时文件 + os.replace 原子写。",
+        "target 文件名安全转换。"
+      ]
+    },
+    {
+      "phase": "dependency_governance",
+      "status": "completed",
+      "files": [
+        "requirements-kali.txt",
+        "requirements-kali-optional.txt",
+        "kali-tools.json",
+        "DEPENDENCIES.md",
+        "scripts/check_kali_dependencies.py",
+        "scripts/install_kali_dependencies.sh",
+        "scripts/snapshot_kali_environment.py",
+        "UI/backend/requirements.txt",
+        "UI/frontend/.nvmrc",
+        "UI/frontend/package.json",
+        "UI/frontend/package-lock.json"
+      ],
+      "details": [
+        "Kali Python 核心依赖与 pwntools/angr 重型可选依赖拆分。",
+        "安全工具按 core/web/network_ad/password/binary_reverse/forensics/cloud_container/osint/exploitation/wireless profile 管理。",
+        "安装脚本默认 dry-run，必须 --apply 才执行。",
+        "环境快照记录 Python 包版本、工具路径、APT 版本和二进制 SHA-256。",
+        "UI backend 补齐 requests、mcp、numpy、LangGraph/LangChain。",
+        "前端 Node 范围 >=18 <23，.nvmrc 推荐 22.22.2。"
+      ]
+    },
+    {
+      "phase": "unified_web_entry",
+      "status": "completed_and_tested",
+      "files": [
+        "run.py",
+        "UI/backend/app.py",
+        "UI/frontend/src/App.jsx",
+        "scripts/test_unified_web.py",
+        "使用说明.txt",
+        "UI/README.md",
+        "UI/快速启动指南.txt",
+        "LLM_ADVISORY_SYSTEM_GUIDE.md"
+      ],
+      "details": [
+        "python run.py 单进程/单端口启动 React dist + Flask API + Socket.IO。",
+        "首次或前端变更后使用 python run.py --build-ui。",
+        "前端 Socket.IO 默认同源；开发模式可用 VITE_BACKEND_URL。",
+        "删除前端硬编码 localhost 后端和 Kali IP。",
+        "用户询问回复由浏览器 -> Socket.IO/Flask -> Kali 代理，不再由浏览器直连 Kali。",
+        "新增 /api/health 与 /api/health/full。",
+        "同一 sid 同时只允许一个后台任务，修复后台线程 emit 上下文问题。",
+        "CLI 降为 python run.py --headless 可选入口。"
+      ]
+    },
+    {
+      "phase": "runtime_protocol_v1",
+      "status": "completed_and_tested",
+      "files": [
+        "user_server/runtime/__init__.py",
+        "user_server/runtime/models.py",
+        "user_server/runtime/event_store.py",
+        "user_server/runtime/event_bus.py",
+        "user_server/runtime/tool_gateway.py",
+        "user_server/runtime/legacy.py"
+      ],
+      "details": [
+        "新增 schema_version=1.0 的 ExecutionEvent。",
+        "事件字段包含 event_id/session_id/trace_id/parent_id/seq/timestamp/type/source/payload/error。",
+        "新增 ToolExecutionRequest、ToolExecutionResult、Finding、Evidence、Artifact、ErrorInfo。",
+        "ToolStatus 统一 queued/running/succeeded/partial/failed/timeout/cancelled。",
+        "FindingStatus 统一 suspected/validating/validated/rejected。",
+        "JsonlEventStore 按 session 保存 append-only JSONL 并分配 seq。",
+        "EventBus 持久化后通知订阅者，订阅者异常不回滚事件。",
+        "ToolGateway 统一发布 tool.started/tool.completed/finding.upsert。",
+        "LegacySocketAdapter 同时生成旧 tool_start/tool_complete/vulnerability_found 等事件，旧 UI 兼容。"
+      ]
+    },
+    {
+      "phase": "tool_result_adapters_v1",
+      "status": "completed_and_tested",
+      "files": [
+        "user_server/runtime/adapters/__init__.py",
+        "user_server/runtime/adapters/base.py",
+        "user_server/runtime/adapters/generic.py",
+        "user_server/runtime/adapters/core_tools.py",
+        "user_server/runtime/adapters/registry.py"
+      ],
+      "details": [
+        "Adapter Registry 支持精确工具适配和 GenericAdapter 兜底。",
+        "首批适配 Nmap、Httpx、Nuclei、Sqlmap、Dalfox、Browser、run_web_skill。",
+        "公共字段规范化，工具专有字段保留在 raw/extensions。",
+        "未知工具不会让系统崩溃，也不会凭字符串自动生成漏洞。",
+        "SQLMap 的 vulnerable:false 不再因包含 vulnerable 单词被误判。",
+        "Nuclei 模板命中默认 suspected；SQLMap/Dalfox 仅在明确正证据时生成 validated finding。"
+      ]
+    },
+    {
+      "phase": "runtime_web_integration_v1",
+      "status": "completed_and_tested",
+      "files": [
+        "UI/backend/orchestrator_wrapper_v2.py",
+        "UI/backend/app.py",
+        "UI/frontend/src/App.jsx",
+        "UI/frontend/src/runtime/eventReducer.js",
+        "scripts/test_runtime_contracts.py",
+        "scripts/test_wrapper_runtime.py",
+        "scripts/test_unified_web.py"
+      ],
+      "details": [
+        "Web URL 的 run_web_skill 路径和普通 Function Calling 路径均通过 ToolGateway。",
+        "前端消费 runtime_event，并按 event_id 去重、seq 维护顺序、call/finding/agent/task upsert。",
+        "前端每 10 条事件发送 runtime_ack，连接时调用 runtime_resume。",
+        "后端增加 runtime_ack/runtime_resume。",
+        "当前 resume 只对仍存在的同一活动 Socket.IO sid 有效，跨刷新稳定 session 尚未实现。"
+      ]
+    }
+  ],
+  "runtime_protocol": {
+    "event_name": "runtime_event",
+    "schema_version": "1.0",
+    "event_types": [
+      "session.created",
+      "session.restored",
+      "agent.status",
+      "agent.message",
+      "task.created",
+      "task.status",
+      "tool.started",
+      "tool.progress",
+      "tool.completed",
+      "finding.upsert",
+      "memory.upsert",
+      "idea.upsert",
+      "approval.required",
+      "approval.resolved",
+      "report.ready",
+      "runtime.error",
+      "runtime.completed"
+    ],
+    "compatibility": "兼容期仍同时发送旧 ai_message/tool_start/tool_complete/vulnerability_found 等事件。",
+    "normalization_rule": "统一公共外壳，不强迫工具专有内容同构；完整原始数据必须保留在 raw/extensions。",
+    "finding_rule": "suspected 可以展示但不可进入正式报告；只有 validated 才进入正式报告。"
+  },
+  "tests_and_verified_results": [
+    {
+      "command": "python scripts/test_runtime_contracts.py",
+      "expected": "RUNTIME_CONTRACTS_PASS",
+      "verified": true,
+      "coverage": "事件 seq/replay、SQLMap/Nuclei/Nmap/Generic Adapter、误报保护、JSON 序列化"
+    },
+    {
+      "command": "python scripts/test_wrapper_runtime.py",
+      "expected": "WRAPPER_RUNTIME_PASS",
+      "verified": true,
+      "coverage": "Wrapper 新 runtime_event 与旧 UI 事件兼容、Finding 事件、LLM tool 消息"
+    },
+    {
+      "command": "python scripts/test_unified_web.py",
+      "expected": "UNIFIED_WEB_INTEGRATION_PASS",
+      "verified": true,
+      "coverage": "React 根页面、基础/聚合健康检查、Socket.IO、用户回复代理、ACK/resume"
+    },
+    {
+      "command": "npm run build --prefix UI/frontend",
+      "expected": "Vite production build succeeds",
+      "verified": true,
+      "last_observed": "72 modules transformed, dist generated"
+    },
+    {
+      "command": "python -m py_compile runtime/app/wrapper/server files",
+      "expected": "No syntax error",
+      "verified": true
+    }
+  ],
+  "known_limits_and_risks": [
+    "真实 Kali nmap/httpx/nuclei/sqlmap/dalfox 尚需在用户 Kali 真机冒烟；当前自动测试使用 Mock Kali。",
+    "MCP 仍为每次工具调用启动一个 STDIO 子进程，Persistent MCP SessionManager 未实现。",
+    "runtime_resume 仍基于临时 Socket.IO sid，页面刷新后 sid 变化，不能真正恢复旧会话。",
+    "Shared State 尚未订阅 runtime_event，因此 Idea/Memory 还不会自动沉淀。",
+    "大 stdout/raw 尚未自动落盘为 Artifact；当前 runtime_event 使用 include_raw=false，但 ToolGateway 内存对象仍保存 raw。",
+    "Manager、Recon/SQLi/XSS/Auth Solver、Observer 均未实现。",
+    "MAB update_performance 与 path record_path_execution 仍未接入 ToolExecutionResult。",
+    "旧 orchestrator_demo.py 和 wrapper 内仍有重复 Cookie、parser、report、消息历史代码，暂时保留用于兼容，不能立即删除。",
+    "Kali server.py 是高权限无统一强鉴权执行端，不能暴露公网；scope/HITL/audit/sandbox 尚待实现。",
+    "前端 runtime reducer 已接入但尚未制作 Agent 拓扑/时间线/Idea-Memory 可视化界面。",
+    "npm audit 曾报告 9 个现有漏洞（1 low、2 moderate、6 high）；未使用 npm audit fix --force，避免破坏兼容性。"
+  ],
+  "next_work_plan": [
+    {
+      "order": 1,
+      "name": "ArtifactStore 与大输出治理",
+      "deliverables": [
+        "user_server/runtime/artifact_store.py",
+        "ToolGateway 在超过阈值时将 raw/stdout 落盘",
+        "事件只发送 summary、preview、artifact_id、sha256、size、mime_type",
+        "Flask 增加受控 artifact 元数据/分页读取接口"
+      ],
+      "acceptance": [
+        "单 runtime_event 不超过约 256KB",
+        "stdout 预览约 16KB",
+        "原始大结果可校验 SHA-256 并按需读取",
+        "适配失败也不丢 raw"
+      ]
+    },
+    {
+      "order": 2,
+      "name": "稳定 RuntimeSession 与跨刷新恢复",
+      "deliverables": [
+        "浏览器 localStorage 保存 runtime_session_id",
+        "Socket.IO connect/auth 携带 runtime_session_id",
+        "后端将临时 sid 映射到稳定 runtime_session_id",
+        "EventStore、Wrapper、SharedState 均按稳定 session/target 管理",
+        "runtime_resume 支持页面刷新和 Web 重启后的事件补发"
+      ],
+      "acceptance": [
+        "页面刷新后能恢复事件时间线",
+        "新的 Socket.IO sid 不会丢会话",
+        "同一 runtime_session_id 防止并发重复执行",
+        "可以显式新建/结束会话"
+      ]
+    },
+    {
+      "order": 3,
+      "name": "事件自动沉淀 Shared State",
+      "deliverables": [
+        "确定性 RuntimeObserver 订阅 EventBus",
+        "tool.completed/finding.upsert 自动生成或更新 Memory/Idea",
+        "shared_state.py 增加 upsert_idea、add_memory_if_absent、find_duplicate、compact_summary",
+        "发布 memory.upsert/idea.upsert"
+      ],
+      "acceptance": [
+        "同 target 新会话读取历史 Memory",
+        "同一 Finding/Idea 幂等去重",
+        "suspected -> Testing -> Verified/Failed 状态流转可测试",
+        "只有 Observer 写全局状态"
+      ]
+    },
+    {
+      "order": 4,
+      "name": "统一 RuntimeSession 和减少第一批冗余",
+      "deliverables": [
+        "RuntimeSession 统一 messages/cookies/findings/cancellation/budget",
+        "Cookie 注入迁移到 ToolGateway",
+        "报告生成迁移到单一 ReportBuilder",
+        "Wrapper 变为 Web Adapter，headless 变为 CLI Adapter"
+      ],
+      "acceptance": [
+        "Web 与 headless 共用同一个运行核心",
+        "Cookie 逻辑只保留一份",
+        "原测试全部继续通过",
+        "确认无引用后才删除不可达旧流程"
+      ]
+    },
+    {
+      "order": 5,
+      "name": "Manager + ReconSolver 最小多 Agent",
+      "deliverables": [
+        "user_server/agents/manager.py",
+        "user_server/agents/solver.py",
+        "user_server/agents/registry.py",
+        "Manager 任务生命周期与预算",
+        "ReconSolver 独立 LLM 上下文、prompt、工具白名单",
+        "第一版串行 handoff"
+      ],
+      "acceptance": [
+        "Manager 创建 task 并调度 ReconSolver",
+        "ReconSolver 通过 ToolGateway 调用真实 MCP 工具",
+        "agent.status/task.status/tool.* 事件可在 UI 时间线看到",
+        "Manager 能根据结构化结果继续或结束"
+      ]
+    },
+    {
+      "order": 6,
+      "name": "领域 Solver + Observer Harness",
+      "deliverables": [
+        "SQLiSolver、XSSSolver、AuthSolver",
+        "Observer 唯一全局写入者",
+        "重复动作/连续失败检测",
+        "Steer Reminder、Ralph-Loop、Context Compaction",
+        "稳定后才开放最多 2-3 个 Solver 并行"
+      ]
+    },
+    {
+      "order": 7,
+      "name": "学习闭环与安全控制面",
+      "deliverables": [
+        "ToolExecutionResult -> MAB.update_performance",
+        "真实 path execution 回写并删除 mock 历史",
+        "MAB/path 状态持久化",
+        "scope 白名单、HITL、审计、低权限/容器隔离",
+        "统一 benchmark 与消融实验"
+      ]
+    }
+  ],
+  "redundancy_cleanup_strategy": {
+    "method": "Strangler pattern",
+    "do_not_delete_yet": [
+      "user_server/orchestrator_demo.py",
+      "UI/backend/orchestrator_wrapper_v2.py",
+      "旧 Socket.IO 事件",
+      "server.py 中 WEB_SKILL_DEFS"
+    ],
+    "delete_only_after": [
+      "Web 与 headless 共用 RuntimeSession",
+      "Cookie/Parser/Report/Emit 新实现均有回归测试",
+      "Grep 确认旧代码无引用",
+      "真实 Kali 冒烟通过",
+      "新前端 runtime_event 稳定"
+    ],
+    "target_redundancies": [
+      "CLI/Web 两套消息历史",
+      "两套 Cookie 注入",
+      "多处 substring 漏洞 parser",
+      "多处报告生成",
+      "分散手工 emit",
+      "每次 MCP 调用启动子进程",
+      "Wrapper 内不可达旧流程",
+      "mock 攻击路径历史"
+    ]
+  },
+  "competitor_design_takeaways": {
+    "lvmeng_ai_team": [
+      "采用 Manager/Observer/Solver 三角色。",
+      "采用 Idea Board + Memory Board。",
+      "采用 Steer Reminder、Ralph-Loop、Context Compaction。"
+    ],
+    "strix": [
+      "Finding 分 suspected/validated。",
+      "漏洞进入报告前需要真实证据或最小 PoC。",
+      "原始证据和 PoC 作为 artifact。"
+    ],
+    "pentagi": [
+      "层级任务与专业 Agent。",
+      "控制面与执行容器隔离。",
+      "长期上下文压缩和可观测性。"
+    ],
+    "cyberstrikeai": [
+      "MCP 动态工具面与结果大小治理。",
+      "跨会话事实、HITL、审计和工具 allowlist。",
+      "单 Agent 与多 Agent 按复杂度选择。"
+    ],
+    "cai": [
+      "Agent-as-tool / handoff。",
+      "Guardrails 与可观察 Agent trajectory。",
+      "先层级/串行模式，暂不首版实现 Swarm/Auction。"
+    ],
+    "project_differentiation_to_keep": [
+      "图引导工具路由。",
+      "Phase-Aware 渗透上下文。",
+      "未来接通真实 MAB 与攻击路径反馈。",
+      "大规模 MCP 安全工具覆盖。"
+    ]
+  },
+  "resume_commands": {
+    "install_ui_backend": "cd <PROJECT_ROOT>/UI/backend && python3 -m venv .venv && source .venv/bin/activate && python -m pip install -r requirements.txt",
+    "build_ui": "cd <PROJECT_ROOT> && python run.py --build-ui",
+    "start_kali": "cd <PROJECT_ROOT> && .venv-kali/bin/python server.py --port 8888",
+    "start_web": "cd <PROJECT_ROOT> && HEXSTRIKE_SERVER_URL=http://<KALI_IP>:8888 python run.py",
+    "run_tests": "cd <PROJECT_ROOT> && python scripts/test_runtime_contracts.py && python scripts/test_wrapper_runtime.py && python scripts/test_unified_web.py",
+    "check_kali": "cd <PROJECT_ROOT> && python3 scripts/check_kali_dependencies.py --profiles core,web",
+    "headless_optional": "cd <PROJECT_ROOT> && python run.py --headless --server-url http://<KALI_IP>:8888"
+  },
+  "referenced_files": {
+    "must_read_first": [
+      "AI_HANDOFF_MEMORY.json",
+      "HexStrikeAI-最终可落地重构方案-消息协议多Agent与去冗余.md",
+      "DEPENDENCIES.md"
+    ],
+    "runtime_core": [
+      "user_server/runtime/models.py",
+      "user_server/runtime/event_store.py",
+      "user_server/runtime/event_bus.py",
+      "user_server/runtime/tool_gateway.py",
+      "user_server/runtime/legacy.py",
+      "user_server/runtime/adapters/base.py",
+      "user_server/runtime/adapters/core_tools.py",
+      "user_server/runtime/adapters/generic.py",
+      "user_server/runtime/adapters/registry.py"
+    ],
+    "web_integration": [
+      "run.py",
+      "UI/backend/app.py",
+      "UI/backend/orchestrator_wrapper_v2.py",
+      "UI/frontend/src/App.jsx",
+      "UI/frontend/src/runtime/eventReducer.js"
+    ],
+    "existing_algorithms": [
+      "GraphRAG/graph_schema.py",
+      "GraphRAG/tool_knowledge_graph.py",
+      "GraphRAG/tool_selector.py",
+      "GraphRAG/phase_aware.py",
+      "GraphRAG/fingerprint_engine.py",
+      "GraphRAG/path_patterns.py",
+      "GraphRAG/rl_optimizer.py",
+      "GraphRAG/advisory_system.py"
+    ],
+    "tests": [
+      "scripts/test_runtime_contracts.py",
+      "scripts/test_wrapper_runtime.py",
+      "scripts/test_unified_web.py"
+    ],
+    "resume_and_analysis_docs_outside_repo": [
+      "../李衡-简历-AI安全Agent补全.md",
+      "../HexStrikeAI-版本B核验与前沿框架对比-2026-08-21.md",
+      "../HexStrikeAI-最终可落地重构方案-消息协议多Agent与去冗余.md"
+    ]
+  },
+  "do_not_claim_as_completed": [
+    "Manager-Observer-Solver 多智能体已经运行。",
+    "多个独立 Solver LLM 已经并行协作。",
+    "共享状态板已由 Observer 自动维护。",
+    "MAB 已随历史执行持续学习。",
+    "攻击路径已从真实历史持续学习。",
+    "当前实现是完整 GraphRAG。",
+    "Observer Harness、Ralph-Loop、Context Compaction 已实现。",
+    "真实 Kali 全部工具已完成端到端验证。",
+    "Persistent MCP SessionManager 已实现。"
+  ],
+  "suggested_resume_prompt_for_next_ai": "请先读取仓库根目录 AI_HANDOFF_MEMORY.json，再按 must_read_first 与 runtime_core 顺序读取文件。不要重写已完成的统一 Web 和 Runtime 协议；先运行三个回归测试确认基线。随后从 next_work_plan 的 order=1 ArtifactStore 开始，实现后必须保持 RUNTIME_CONTRACTS_PASS、WRAPPER_RUNTIME_PASS、UNIFIED_WEB_INTEGRATION_PASS 和前端 build 全部通过。不得把未实现的 Manager/Observer/Solver 或 MAB 闭环写成已完成。"
+}

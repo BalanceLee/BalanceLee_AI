@@ -1,0 +1,85 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #0a0a0a;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  background: linear-gradient(135deg, #8B0000 0%, #DC143C 100%);
+  border-bottom: 2px solid #DC143C;
+  box-shadow: 0 2px 10px rgba(220, 20, 60, 0.3);
+}
+
+.app-header h1 {
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #fff;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.status-dot.connected {
+  background: #00ff00;
+  box-shadow: 0 0 10px #00ff00;
+}
+
+.status-dot.disconnected {
+  background: #ff0000;
+  box-shadow: 0 0 10px #ff0000;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.app-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  padding: 1rem;
+  flex: 1;
+  overflow: hidden;
+}
+
+.right-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .app-content {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+  
+  .app-header h1 {
+    font-size: 1.2rem;
+  }
+}

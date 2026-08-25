@@ -1,0 +1,160 @@
+═══════════════════════════════════════════════════════════
+    HexStrike AI - Web UI 快速启动指南
+═══════════════════════════════════════════════════════════
+
+📋 启动步骤（按顺序执行）：
+
+⚠️ 重要：启动前必须设置环境变量！
+
+0️⃣ 设置环境变量（必须！）
+   ----------------------------------------
+   # Windows 命令行（每次启动前都要设置）
+   set LLM_API_KEY=你的API Key
+   set LLM_API_BASE_URL=https://api.deepseek.com/v1/chat/completions
+   set LLM_MODEL=deepseek-chat
+   set HEXSTRIKE_SERVER_URL=http://192.168.169.1:8888
+   set HEXSTRIKE_MCP_AUTOSTART=0
+   
+   ✅ 确认：echo %LLM_API_KEY% 能看到你的API Key
+   ✅ 完整依赖与工具更新方式见项目根目录 DEPENDENCIES.md
+
+1️⃣ 启动 HexStrike 工具服务端（端口8888）
+   ----------------------------------------
+   # 在 Kali Linux 上运行
+   cd hexstrike-ai-master
+   .venv-kali/bin/python server.py --port 8888
+   
+   ✅ 确认看到：服务运行在 http://192.168.x.x:8888
+
+2️⃣ 启动后端（Flask + WebSocket）
+   ----------------------------------------
+   # 在 Windows 上运行（新终端）
+   # 确保已设置环境变量！
+   cd hexstrike-ai-master\UI\backend
+   
+   # 第一次需要安装依赖
+   pip install -r requirements.txt
+   
+   # 启动Flask服务
+   python app.py
+   
+   ✅ 确认看到：WebSocket服务 http://localhost:5000
+
+3️⃣ 启动前端（React）
+   ----------------------------------------
+   # 在 Windows 上运行（新终端）
+   cd hexstrike-ai-master\UI\frontend
+   
+   # 第一次需要安装依赖（可能需要几分钟）
+   npm install
+   
+   # 启动开发服务器
+   npm run dev
+   
+   ✅ 确认看到：Local: http://localhost:5173
+
+4️⃣ 访问应用
+   ----------------------------------------
+   打开浏览器访问：http://localhost:5173
+   
+   ✅ 看到红色主题的界面，右上角显示"已连接"
+
+═══════════════════════════════════════════════════════════
+
+🎯 使用方法：
+
+1. 在左侧输入框输入目标URL，例如：
+   测试 http://192.168.169.1/Online_Appointment_Booking_System/cover.php
+
+2. 点击"🚀 发送"按钮
+
+3. 观察：
+   - 左侧：AI对话和漏洞卡片
+   - 右侧：实时终端输出
+
+4. 发现漏洞时：
+   - 会弹出选择按钮
+   - 可以选择"继续测试"、"生成报告"或"停止测试"
+
+5. 查看漏洞详情：
+   - 点击漏洞卡片展开
+   - 查看Payload和EXP代码
+   - 点击"📋 复制"按钮复制EXP
+
+═══════════════════════════════════════════════════════════
+
+⚙️ 环境变量说明：
+
+必须设置的环境变量：
+  LLM_API_KEY          - LLM API密钥（必须）
+  LLM_API_BASE_URL     - LLM API地址（必须）
+  LLM_MODEL            - LLM模型名称（必须）
+  HEXSTRIKE_SERVER_URL - Kali服务端地址（必须）
+
+示例（DeepSeek）：
+  set LLM_API_KEY=sk-xxxxxxxxxxxxxxxx
+  set LLM_API_BASE_URL=https://api.deepseek.com/v1/chat/completions
+  set LLM_MODEL=deepseek-chat
+  set HEXSTRIKE_SERVER_URL=http://192.168.169.1:8888
+
+示例（OpenAI）：
+  set LLM_API_KEY=sk-xxxxxxxxxxxxxxxx
+  set LLM_API_BASE_URL=https://api.openai.com/v1/chat/completions
+  set LLM_MODEL=gpt-4
+  set HEXSTRIKE_SERVER_URL=http://192.168.169.1:8888
+
+═══════════════════════════════════════════════════════════
+
+⚡ 后续启动（简化流程）：
+
+第一次安装依赖后，后续启动只需要：
+
+### 终端1：启动Kali工具服务端
+cd hexstrike-ai-master
+.venv-kali/bin/python server.py --port 8888
+
+### 终端2：设置环境变量 + 启动Flask后端
+set LLM_API_KEY=你的Key
+set LLM_API_BASE_URL=你的URL
+set LLM_MODEL=你的模型
+set HEXSTRIKE_SERVER_URL=http://192.168.169.1:8888
+cd hexstrike-ai-master\UI\backend
+python app.py
+
+### 终端3：启动React前端
+cd hexstrike-ai-master\UI\frontend
+npm run dev
+
+### 浏览器访问
+http://localhost:5173
+
+═══════════════════════════════════════════════════════════
+
+🐛 常见问题排查：
+
+Q: 提示 "LLM调用失败"？
+A: 检查环境变量是否设置：echo %LLM_API_KEY%
+
+Q: 前端显示"未连接"？
+A: 检查后端是否启动，查看 http://localhost:5000 是否可访问
+
+Q: 工具执行失败？
+A: 检查 HEXSTRIKE_SERVER_URL 是否正确，Kali服务端是否启动
+
+Q: npm install 很慢？
+A: 使用国内镜像：
+   npm config set registry https://registry.npmmirror.com
+   npm install
+
+═══════════════════════════════════════════════════════════
+
+💡 提示：
+
+- 环境变量只在当前终端有效，关闭后需要重新设置
+- 建议创建一个 start.bat 脚本保存环境变量设置
+- 首次启动需要安装依赖，可能需要几分钟
+- 建议使用Chrome或Edge浏览器
+
+═══════════════════════════════════════════════════════════
+
+🎉 享受专业级的渗透测试体验！

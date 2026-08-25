@@ -1,0 +1,217 @@
+.vuln-card {
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid;
+  transition: all 0.3s;
+}
+
+.vuln-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.severity-critical {
+  border-color: #8B0000;
+  background: linear-gradient(135deg, #1a0000 0%, #2a0000 100%);
+}
+
+.severity-high {
+  border-color: #DC143C;
+  background: linear-gradient(135deg, #2a0a0a 0%, #3a1010 100%);
+}
+
+.severity-medium {
+  border-color: #FF8C00;
+  background: linear-gradient(135deg, #2a1a0a 0%, #3a2510 100%);
+}
+
+.severity-low {
+  border-color: #FFD700;
+  background: linear-gradient(135deg, #2a2a0a 0%, #3a3510 100%);
+}
+
+.severity-info {
+  border-color: #4682B4;
+  background: linear-gradient(135deg, #0a1a2a 0%, #10253a 100%);
+}
+
+.vuln-header {
+  padding: 1rem;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+}
+
+.vuln-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.vuln-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.vuln-icon {
+  font-size: 1.5rem;
+}
+
+.vuln-type {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.vuln-severity {
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: bold;
+}
+
+.vuln-severity.severity-critical {
+  background: #8B0000;
+  color: #fff;
+}
+
+.vuln-severity.severity-high {
+  background: #DC143C;
+  color: #fff;
+}
+
+.vuln-severity.severity-medium {
+  background: #FF8C00;
+  color: #000;
+}
+
+.vuln-severity.severity-low {
+  background: #FFD700;
+  color: #000;
+}
+
+.vuln-severity.severity-info {
+  background: #4682B4;
+  color: #fff;
+}
+
+.expand-icon {
+  font-size: 0.9rem;
+  color: #888;
+  transition: transform 0.3s;
+}
+
+.vuln-body {
+  padding: 0 1rem 1rem 1rem;
+  animation: expandDown 0.3s ease-out;
+}
+
+@keyframes expandDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 1000px;
+  }
+}
+
+.vuln-info {
+  margin-bottom: 1rem;
+}
+
+.vuln-info p {
+  margin-bottom: 0.5rem;
+  line-height: 1.6;
+}
+
+.vuln-info strong {
+  color: #DC143C;
+}
+
+.vuln-info code {
+  background: #0a0a0a;
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.9rem;
+  color: #4CAF50;
+}
+
+.vuln-payload {
+  margin-top: 0.75rem;
+}
+
+.vuln-payload pre {
+  background: #0a0a0a;
+  padding: 0.75rem;
+  border-radius: 4px;
+  border-left: 3px solid #DC143C;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  color: #4CAF50;
+}
+
+.vuln-exploit {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #0a0a0a;
+  border-radius: 6px;
+  border: 1px solid #333;
+}
+
+.exploit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.exploit-header strong {
+  color: #DC143C;
+}
+
+.btn-copy {
+  padding: 0.4rem 0.8rem;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #e0e0e0;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-copy:hover {
+  background: #DC143C;
+  border-color: #DC143C;
+  color: #fff;
+}
+
+.exploit-code {
+  background: #000;
+  padding: 1rem;
+  border-radius: 4px;
+  border-left: 3px solid #4CAF50;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: #4CAF50;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.exploit-code::-webkit-scrollbar {
+  height: 6px;
+}
+
+.exploit-code::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+.exploit-code::-webkit-scrollbar-thumb {
+  background: #DC143C;
+  border-radius: 3px;
+}
