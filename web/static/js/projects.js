@@ -957,16 +957,6 @@ function renderProjectDetailMeta(updatedAt) {
     metaEl.title = full;
 }
 
-function refreshProjectDetailMetaI18n() {
-    if (!currentProjectId) return;
-    let updatedAt = currentProjectUpdatedAt;
-    if (updatedAt == null) {
-        const source = projectsCacheAll.length ? projectsCacheAll : projectsCache;
-        const p = source.find((x) => x.id === currentProjectId);
-        updatedAt = p?.updated_at;
-    }
-    renderProjectDetailMeta(updatedAt);
-}
 
 function updateProjectStats(stats) {
     const s = stats || {};
@@ -4053,24 +4043,7 @@ function initChatProjectSelector() {
     window._chatProjectSelectorInited = true;
     if (!window._projectsLanguageListenerBound) {
         window._projectsLanguageListenerBound = true;
-        document.addEventListener('languagechange', () => {
-            renderProjectsSidebar();
-            renderProjectsPagination();
-            syncAllProjectsFilterSelects();
-            updateChatProjectButtonLabel();
-            refreshChatProjectFolders();
-            const panel = document.getElementById('chat-project-panel');
-            if (panel && panel.style.display === 'flex') loadChatProjectPanelList();
-            if (currentProjectId) {
-                refreshProjectDetailMetaI18n();
-                const source = projectsCacheAll.length ? projectsCacheAll : projectsCache;
-                const p = source.find((x) => x.id === currentProjectId);
-                if (p) updateProjectStatusPill(p.status || 'active');
-                refreshProjectHeaderStats().catch(() => {});
-                switchProjectTab(currentProjectTab || 'facts');
             }
-        });
-    }
     refreshChatProjectSelector().catch(() => {});
     document.addEventListener('click', (e) => {
         const panel = document.getElementById('chat-project-panel');

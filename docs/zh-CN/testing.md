@@ -56,12 +56,6 @@ go build -o balancelee-ai ./cmd/server
 
 ## API 手测
 
-访问：
-
-```text
-/api-docs
-```
-
 重点验证：
 
 - 登录。
@@ -115,7 +109,7 @@ go build -o balancelee-ai ./cmd/server
 - 新建对话和流式回复。
 - 设置页面保存。
 - 相关业务页面增删改查。
-- 中英文切换。
+- 中文文案加载和动态内容刷新。
 - 浏览器控制台无明显错误。
 
 ## 高风险模块测试

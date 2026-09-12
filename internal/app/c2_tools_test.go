@@ -21,10 +21,10 @@ func TestC2ListenerCreateInheritsConversationProject(t *testing.T) {
 	}
 	defer db.Close()
 
-	user, err := db.CreateRBACUser("c2-agent", "C2 Agent", "hash", true, nil)
-	if err != nil {
+	if err := db.BootstrapAdmin("hash"); err != nil {
 		t.Fatal(err)
 	}
+	user := &database.RBACUser{ID: "admin", Username: "admin"}
 	project, err := db.CreateProject(&database.Project{Name: "engagement"})
 	if err != nil {
 		t.Fatal(err)

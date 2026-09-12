@@ -22,7 +22,7 @@ func TestStandaloneMCPPrefersUserRBACAndDisablesGlobalTokenByDefault(t *testing.
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	auth := security.NewAuthManager(12)
-	if _, err := auth.AttachRBACStore(db); err != nil {
+	if _, err := auth.AttachAdminStore(db); err != nil {
 		t.Fatal(err)
 	}
 	hash, err := security.HashPassword("admin-secret")

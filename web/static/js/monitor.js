@@ -75,28 +75,16 @@ if (typeof window !== 'undefined') {
     window.shouldSkipTaskEventReplayAttach = shouldSkipTaskEventReplayAttach;
 }
 
-// 当前界面语言对应的 BCP 47 标签（与时间格式化一致）
 function getCurrentTimeLocale() {
-    if (typeof window.__locale === 'string' && window.__locale.length) {
-        return window.__locale.startsWith('zh') ? 'zh-CN' : 'en-US';
-    }
-    if (typeof i18next !== 'undefined' && i18next.language) {
-        return (i18next.language || '').startsWith('zh') ? 'zh-CN' : 'en-US';
-    }
     return 'zh-CN';
 }
 
 // toLocaleTimeString 选项：中文用 24 小时制，避免仍显示 AM/PM
 function getTimeFormatOptions() {
-    const loc = getCurrentTimeLocale();
-    const base = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
-    if (loc === 'zh-CN') {
-        base.hour12 = false;
-    }
-    return base;
+    return { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
 }
 
-// 将后端下发的进度文案转为当前语言的翻译（中英双向映射，切换语言后能跟上）
+// 将后端下发的历史中英文进度文案统一映射为中文。
 /** Plan-Execute：将 Eino 内部 agent 名本地化为进度条标题用语 */
 function translatePlanExecuteAgentName(name) {
     const n = String(name || '').trim().toLowerCase();
@@ -362,7 +350,7 @@ function translateProgressMessage(message, data) {
         '开始分析请求并制定测试策略': 'progress.analyzingRequestPlanning',
         '正在启动 Eino DeepAgent...': 'progress.startingEinoDeepAgent',
         '正在启动 Eino 多代理...': 'progress.startingEinoMultiAgent',
-        // 英文（与 en-US.json 一致，避免后端/缓存已是英文时无法随语言切换）
+        // 兼容旧记录中的英文事件，并统一映射为当前中文文案。
         'Calling AI model...': 'progress.callingAI',
         'Last iteration: generating summary and next steps...': 'progress.lastIterSummary',
         'Summary complete': 'progress.summaryDone',
@@ -1069,6 +1057,9 @@ function updateAssistantBubbleContent(assistantMessageId, content, renderMarkdow
     if (typeof window.appendMessageCopyButton === 'function') {
         window.appendMessageCopyButton(assistantElement);
     }
+    if (typeof window.appendAttackGraphLink === 'function' && currentConversationId) {
+        window.appendAttackGraphLink(assistantElement, currentConversationId);
+    }
 
     if (typeof window.csMarkdownSanitize !== 'undefined') {
         window.csMarkdownSanitize.stripSuspiciousImages(bubble);
@@ -1292,6 +1283,24 @@ function findProgressIdByConversationId(conversationId) {
     return fallback;
 }
 
+function bindProgressAttackGraphButton(progressElement, conversationId) {
+    if (!progressElement) return null;
+    const button = progressElement.querySelector('.progress-attack-graph');
+    if (!button) return null;
+    const cid = String(conversationId || '').trim();
+    button.dataset.conversationId = cid;
+    button.disabled = !cid;
+    button.textContent = cid
+        ? (typeof window.t === 'function' ? window.t('chat.liveAttackGraph') : '查看实时攻击图')
+        : (typeof window.t === 'function' ? window.t('chat.liveAttackGraphPreparing') : '攻击图准备中');
+    const title = cid
+        ? (typeof window.t === 'function' ? window.t('chat.liveAttackGraphTitle') : '打开当前对话的实时攻击图')
+        : (typeof window.t === 'function' ? window.t('chat.liveAttackGraphPreparingTitle') : '正在等待会话初始化');
+    button.title = title;
+    button.setAttribute('aria-label', title);
+    return button;
+}
+
 function registerProgressTask(progressId, conversationId = null) {
     const state = progressTaskState.get(progressId) || {};
     state.conversationId = conversationId !== undefined && conversationId !== null
@@ -1303,6 +1312,7 @@ function registerProgressTask(progressId, conversationId = null) {
     const progressElement = document.getElementById(progressId);
     if (progressElement) {
         progressElement.dataset.conversationId = state.conversationId || '';
+        bindProgressAttackGraphButton(progressElement, state.conversationId);
     }
 }
 
@@ -1557,6 +1567,8 @@ function addProgressMessage() {
     const progressTitleText = typeof window.t === 'function' ? window.t('chat.progressInProgress') : '渗透测试进行中...';
     const stopTaskText = typeof window.t === 'function' ? window.t('tasks.stopTask') : '停止任务';
     const collapseDetailText = typeof window.t === 'function' ? window.t('tasks.collapseDetail') : '收起详情';
+    const attackGraphPreparingText = typeof window.t === 'function' ? window.t('chat.liveAttackGraphPreparing') : '攻击图准备中';
+    const attackGraphPreparingTitle = typeof window.t === 'function' ? window.t('chat.liveAttackGraphPreparingTitle') : '正在等待会话初始化';
     bubble.innerHTML = `
         <div class="progress-header">
             <button type="button" class="turn-process-summary progress-summary-toggle is-expanded" aria-expanded="true" onclick="toggleProgressDetails('${id}')">
@@ -1565,6 +1577,10 @@ function addProgressMessage() {
                     <span class="progress-title"></span>
                 </span>
                 <svg class="turn-process-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M7.5 5.5L12 10l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button type="button" class="progress-attack-graph" disabled
+                    title="${escapeHtmlLocal(attackGraphPreparingTitle)}" aria-label="${escapeHtmlLocal(attackGraphPreparingTitle)}">
+                ${escapeHtmlLocal(attackGraphPreparingText)}
             </button>
             <div class="progress-actions">
                 <button class="progress-stop" id="${id}-stop-btn" onclick="cancelProgressTask('${id}')">${stopTaskText}</button>
@@ -1584,6 +1600,16 @@ function addProgressMessage() {
     messageDiv.dataset.turnStartedAtMs = String(Date.now());
     messageDiv.dataset.turnStartedAt = new Date().toISOString();
     messagesDiv.appendChild(messageDiv);
+    const attackGraphButton = messageDiv.querySelector('.progress-attack-graph');
+    if (attackGraphButton) {
+        attackGraphButton.addEventListener('click', function () {
+            const conversationId = String(attackGraphButton.dataset.conversationId || '').trim();
+            if (conversationId && typeof window.openLiveAttackGraph === 'function') {
+                window.openLiveAttackGraph(conversationId);
+            }
+        });
+    }
+    bindProgressAttackGraphButton(messageDiv, currentConversationId);
     bubble.classList.add('is-streaming');
     const progressWasPinned = typeof window.captureScrollPinState === 'function'
         ? window.captureScrollPinState()
@@ -2900,6 +2926,33 @@ function dispatchAgentPlanTaskEvent(event, fallbackConversationId) {
     }));
 }
 
+const LIVE_ATTACK_CHAIN_REFRESH_EVENTS = new Set([
+    'conversation',
+    'iteration',
+    'planning',
+    'thinking',
+    'reasoning_chain',
+    'tool_calls_detected',
+    'tool_call',
+    'tool_result',
+    'knowledge_retrieval',
+    'response_start',
+    'response',
+    'error',
+    'cancelled',
+    'done'
+]);
+
+function scheduleLiveAttackChainRefreshForEvent(event, fallbackConversationId) {
+    if (!event || !LIVE_ATTACK_CHAIN_REFRESH_EVENTS.has(String(event.type || ''))) return;
+    if (typeof window.scheduleLiveAttackChainRefresh !== 'function') return;
+    const data = event.data && typeof event.data === 'object' ? event.data : {};
+    const conversationId = String(
+        data.conversationId || fallbackConversationId || window.currentConversationId || ''
+    ).trim();
+    if (conversationId) window.scheduleLiveAttackChainRefresh(conversationId);
+}
+
 // 处理流式事件
 function handleStreamEvent(event, progressElement, progressId, 
                           getAssistantId, setAssistantId, getMcpIds, setMcpIds, options) {
@@ -2929,6 +2982,7 @@ function handleStreamEvent(event, progressElement, progressId,
         }
     }
     dispatchAgentPlanTaskEvent(event, expectedConversationId || eventConversationId);
+    scheduleLiveAttackChainRefreshForEvent(event, expectedConversationId || eventConversationId);
     const streamScrollWasPinned = typeof window.captureScrollPinState === 'function'
         ? window.captureScrollPinState()
         : (typeof window.isChatMessagesPinnedToBottom === 'function' ? window.isChatMessagesPinnedToBottom() : true);
@@ -3799,7 +3853,6 @@ function handleStreamEvent(event, progressElement, progressId,
         case 'progress':
             const progressTitle = document.querySelector(`#${progressId} .progress-stage`);
             if (progressTitle) {
-                // 保存原文，语言切换时可用 translateProgressMessage 重新套当前语言
                 const progressEl = document.getElementById(progressId);
                 if (progressEl) {
                     progressEl.dataset.progressRawMessage = event.message || '';
@@ -6438,7 +6491,6 @@ function getToolCallStatusPresentation(status) {
     return null;
 }
 
-// 实时事件、刷新后的历史记录和语言切换都复用同一套工具状态展示。
 function applyToolCallStatus(item, status) {
     if (!item) return;
     const presentation = getToolCallStatusPresentation(status);
@@ -6634,7 +6686,7 @@ function addTimelineItem(timeline, type, options) {
     if (type === 'eino_run_retry') {
         item.classList.add('timeline-item-warning');
     }
-    // 记录类型与参数，便于 languagechange 时刷新标题文案
+    // 记录类型与参数，供时间线重绘时复用。
     item.dataset.timelineType = type;
     if (type === 'iteration') {
         const n = options.iterationN != null ? options.iterationN : (options.data && options.data.iteration != null ? options.data.iteration : 1);
@@ -6755,7 +6807,6 @@ function addTimelineItem(timeline, type, options) {
     } else {
         eventTime = new Date();
     }
-    // 保存事件时间 ISO，语言切换时可重算时间格式
     try {
         item.dataset.createdAtIso = eventTime.toISOString();
     } catch (e) { /* ignore */ }
@@ -7051,9 +7102,7 @@ function stableActiveTasksForDisplay(tasks) {
 }
 
 function activeTasksRenderSignature(tasks) {
-    const language = typeof i18next !== 'undefined' && i18next.language ? i18next.language : getCurrentTimeLocale();
     return JSON.stringify({
-        language: language,
         tasks: (Array.isArray(tasks) ? tasks : []).map(function (task) {
             return {
                 conversationId: task && task.conversationId || '',
@@ -7657,7 +7706,7 @@ function applyMonitorPayload(result, statusFilter) {
         };
     }
 
-    const locale = typeof window.__locale === 'string' ? window.__locale : '';
+    const locale = 'zh-CN';
     const toolFilterEl = document.getElementById('monitor-tool-filter');
     const currentToolFilter = toolFilterEl ? toolFilterEl.value.trim() : '';
     const statsKey = monitorRenderKey([
@@ -7809,7 +7858,7 @@ function buildMcpTimelineSvg(points, rangeKey) {
     const maxVal = Math.max(1, ...points.map((p) => p.total || 0));
     const hasFailed = points.some((p) => (p.failed || 0) > 0);
     const hasBlocked = points.some((p) => (p.blocked || 0) > 0);
-    const locale = (typeof window.__locale === 'string' && window.__locale.startsWith('zh')) ? 'zh-CN' : 'en-US';
+    const locale = 'zh-CN';
     const barGap = points.length > 48 ? 1 : 2;
     const barW = Math.max(1.6, Math.min(8, (plotW / Math.max(1, points.length)) - barGap));
 
@@ -7962,7 +8011,7 @@ function bindMcpStatsTimelineEvents() {
         const failed = dot.getAttribute('data-failed') || '0';
         const blocked = dot.getAttribute('data-blocked') || '0';
         const tip = mcpMonitorT('timelineTooltip', { time, total, failed, blocked })
-            || monitorFallback(`${time}：${total} 次（失败 ${failed}，安全拦截 ${blocked}）`, `${time}: ${total} calls (${failed} failed, ${blocked} blocked)`);
+            || monitorFallback(`${time}：${total} 次（失败 ${failed}，安全拦截 ${blocked}）`);
         mcpTimelineTooltipEl.textContent = tip;
         mcpTimelineTooltipEl.style.display = 'block';
         mcpTimelineTooltipEl.style.left = `${e.clientX}px`;
@@ -8027,7 +8076,7 @@ function buildTimelineSparseHint(points, timeline) {
     if (nonZeroRatio > 0.3 && !peakNearEnd) return '';
 
     const rangeKey = timeline.range || getMcpMonitorTimelineRange();
-    const locale = (typeof window.__locale === 'string' && window.__locale.startsWith('zh')) ? 'zh-CN' : 'en-US';
+    const locale = 'zh-CN';
     const peakTime = timeline.summary.peakAt
         ? formatMcpTimelineLabel(timeline.summary.peakAt, rangeKey, locale)
         : formatMcpTimelineLabel(points[peakIdx].t, rangeKey, locale);
@@ -8037,7 +8086,7 @@ function buildTimelineSparseHint(points, timeline) {
 
 function renderMcpTimelineActiveMoments(points, rangeKey) {
     if (!Array.isArray(points) || points.length === 0) return '';
-    const locale = (typeof window.__locale === 'string' && window.__locale.startsWith('zh')) ? 'zh-CN' : 'en-US';
+    const locale = 'zh-CN';
     const active = points
         .map((p, i) => ({ ...p, i }))
         .filter((p) => (p.total || 0) > 0)
@@ -8045,14 +8094,14 @@ function renderMcpTimelineActiveMoments(points, rangeKey) {
     const shown = active.slice(0, 4);
     const hiddenCount = Math.max(0, active.length - shown.length);
     if (!active.length) return '';
-    const label = mcpMonitorT('timelineActiveMoments') || monitorFallback('活跃时段', 'Active moments');
+    const label = mcpMonitorT('timelineActiveMoments') || monitorFallback('活跃时段');
     const moreLabel = mcpMonitorT('timelineMoreMoments', { n: hiddenCount }) || `+${hiddenCount}`;
     const chips = shown.map((p) => {
         const time = formatMcpTimelineLabel(p.t, rangeKey, locale);
         const failed = p.failed || 0;
         const failedLabel = mcpMonitorT('failedCount', { n: failed }) || `失败 ${failed}`;
         const blocked = p.blocked || 0;
-        const blockedLabel = mcpMonitorT('blockedCount', { n: blocked }) || monitorFallback(`安全拦截 ${blocked}`, `Blocked ${blocked}`);
+        const blockedLabel = mcpMonitorT('blockedCount', { n: blocked }) || monitorFallback(`安全拦截 ${blocked}`);
         return `<span class="mcp-stats-timeline-moment" title="${escapeHtml(time)}">
             <span class="mcp-stats-timeline-moment__time">${escapeHtml(time)}</span>
             <span class="mcp-stats-timeline-moment__count">${p.total || 0}</span>
@@ -8099,9 +8148,9 @@ function renderMcpStatsTimelineRangeButtons() {
 const MCP_TIMELINE_EMPTY_ICON = '<svg class="mcp-stats-timeline-empty-state__icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>';
 
 function renderMcpStatsTimelineEmptyState(compact) {
-    const noData = mcpMonitorT('timelineNoData') || monitorFallback('该时段暂无调用', 'No calls in this period');
+    const noData = mcpMonitorT('timelineNoData') || monitorFallback('该时段暂无调用');
     const emptyHint = mcpMonitorT('timelineEmptyHint')
-        || monitorFallback('切换时间范围查看其他时段，或在对话/任务中调用 MCP 工具', 'Switch the time range or invoke MCP tools in chat or tasks');
+        || monitorFallback('切换时间范围查看其他时段，或在对话/任务中调用 MCP 工具');
     const compactClass = compact ? ' mcp-stats-timeline-empty-state--compact' : '';
     return `<div class="mcp-stats-timeline-empty-state${compactClass}">
         ${MCP_TIMELINE_EMPTY_ICON}
@@ -8112,14 +8161,14 @@ function renderMcpStatsTimelineEmptyState(compact) {
 
 function renderMcpStatsTimelineBody(timeline, timelineError, compactEmpty, loading) {
     if (loading) {
-        const loadingText = mcpMonitorT('timelineLoading') || monitorFallback('趋势加载中…', 'Loading trend…');
+        const loadingText = mcpMonitorT('timelineLoading') || monitorFallback('趋势加载中…');
         return `<div class="monitor-empty monitor-empty--inline">${escapeHtml(loadingText)}</div>`;
     }
 
-    const hint = mcpMonitorT('timelineHint') || monitorFallback('全部工具合计', 'All tools combined');
+    const hint = mcpMonitorT('timelineHint') || monitorFallback('全部工具合计');
 
     if (timelineError) {
-        const errText = mcpMonitorT('timelineLoadError') || monitorFallback('无法加载调用趋势', 'Failed to load call trend');
+        const errText = mcpMonitorT('timelineLoadError') || monitorFallback('无法加载调用趋势');
         return `<p class="mcp-stats-timeline-error">${escapeHtml(errText)}：${escapeHtml(timelineError)}</p>`;
     }
 
@@ -8137,7 +8186,7 @@ function renderMcpStatsTimelineBody(timeline, timelineError, compactEmpty, loadi
     const chartSvg = buildMcpTimelineSvg(points, rangeKey);
     const totalLegend = mcpMonitorT('timelineTotalLegend') || '总调用';
     const failLegend = mcpMonitorT('timelineFailedLegend') || '失败';
-    const blockedLegend = mcpMonitorT('timelineBlockedLegend') || monitorFallback('安全拦截', 'Blocked');
+    const blockedLegend = mcpMonitorT('timelineBlockedLegend') || monitorFallback('安全拦截');
     const hasFailed = points.some((p) => (p.failed || 0) > 0);
     const hasBlocked = points.some((p) => (p.blocked || 0) > 0);
     const sparseHint = buildTimelineSparseHint(points, timeline);
@@ -8159,9 +8208,9 @@ function renderMcpStatsTimelineBody(timeline, timelineError, compactEmpty, loadi
 }
 
 function renderMcpStatsCombinedSection(topTools, totals, activeToolFilter, timeline, timelineError, showTimeline) {
-    const statsTitle = mcpMonitorT('toolStatsTitle') || monitorFallback('工具统计', 'Tool statistics');
-    const timelineTitle = mcpMonitorT('timelineTitle') || monitorFallback('调用趋势', 'Call trend');
-    const statsHint = mcpMonitorT('toolStatsHint') || monitorFallback('点击色条或列表行筛选下方执行记录', 'Click a bar segment or row to filter records below');
+    const statsTitle = mcpMonitorT('toolStatsTitle') || monitorFallback('工具统计');
+    const timelineTitle = mcpMonitorT('timelineTitle') || monitorFallback('调用趋势');
+    const statsHint = mcpMonitorT('toolStatsHint') || monitorFallback('点击色条或列表行筛选下方执行记录');
     const hasTools = topTools.length > 0;
 
     if (!hasTools && !showTimeline) return '';
@@ -8234,8 +8283,8 @@ function mcpMonitorT(key, params) {
     return text;
 }
 
-function monitorFallback(zhText, enText) {
-    return (typeof window.__locale === 'string' && window.__locale.startsWith('zh')) ? zhText : enText;
+function monitorFallback(zhText) {
+    return zhText;
 }
 
 function refreshMonitorPanelFromState() {
@@ -8587,15 +8636,15 @@ function renderMcpStatsStackedBar(success, failed) {
 function updateMonitorStatsSubtitle(lastFetchedAt, toolCount, retentionDays) {
     const subtitle = document.getElementById('monitor-stats-subtitle');
     if (!subtitle) return;
-    const locale = (typeof window.__locale === 'string' && window.__locale.startsWith('zh')) ? 'zh-CN' : 'en-US';
+    const locale = 'zh-CN';
     const timeText = lastFetchedAt
         ? (lastFetchedAt.toLocaleString ? lastFetchedAt.toLocaleString(locale) : String(lastFetchedAt))
         : '—';
     let text = mcpMonitorT('statsSubtitle', { time: timeText, count: toolCount })
-        || monitorFallback(`最后刷新 ${timeText} · 共 ${toolCount} 个工具`, `Refreshed ${timeText} · ${toolCount} tools`);
+        || monitorFallback(`最后刷新 ${timeText} · 共 ${toolCount} 个工具`);
     if (typeof retentionDays === 'number' && retentionDays > 0) {
         const hint = mcpMonitorT('retentionHint', { days: retentionDays })
-            || monitorFallback(`执行记录保留 ${retentionDays} 天，超期自动清理`, `Execution records are kept for ${retentionDays} days, then purged automatically.`);
+            || monitorFallback(`执行记录保留 ${retentionDays} 天，超期自动清理`);
         text += ' · ' + hint;
     }
     subtitle.textContent = text;
@@ -8690,14 +8739,14 @@ function bindMonitorStatsPanelEvents() {
 }
 
 function renderMcpStatsMetricsBar(totals, successRate, rateTone, rateSubText, lastCallText, hasCalls = true) {
-    const totalCallsLabel = mcpMonitorT('totalCalls') || monitorFallback('总调用次数', 'Total calls');
-    const successRateLabel = mcpMonitorT('successRate') || monitorFallback('成功率', 'Success rate');
-    const lastCallLabel = mcpMonitorT('lastCall') || monitorFallback('最近一次调用', 'Last call');
-    const successPill = mcpMonitorT('successCount', { n: totals.success }) || monitorFallback(`成功 ${totals.success}`, `Success ${totals.success}`);
-    const failedPill = mcpMonitorT('failedCount', { n: totals.failed }) || monitorFallback(`失败 ${totals.failed}`, `Failed ${totals.failed}`);
-    const blockedPill = mcpMonitorT('blockedCount', { n: totals.blocked }) || monitorFallback(`安全拦截 ${totals.blocked}`, `Blocked ${totals.blocked}`);
-    const neutralPill = mcpMonitorT('neutralCount', { n: totals.neutral }) || monitorFallback(`终止 ${totals.neutral}`, `Stopped ${totals.neutral}`);
-    const rateHint = mcpMonitorT('rateExcludesBlocked') || monitorFallback('成功率仅统计成功和失败的调用，不包含安全拦截和终止', 'Success rate includes only successful and failed calls; blocked and stopped calls are excluded');
+    const totalCallsLabel = mcpMonitorT('totalCalls') || monitorFallback('总调用次数');
+    const successRateLabel = mcpMonitorT('successRate') || monitorFallback('成功率');
+    const lastCallLabel = mcpMonitorT('lastCall') || monitorFallback('最近一次调用');
+    const successPill = mcpMonitorT('successCount', { n: totals.success }) || monitorFallback(`成功 ${totals.success}`);
+    const failedPill = mcpMonitorT('failedCount', { n: totals.failed }) || monitorFallback(`失败 ${totals.failed}`);
+    const blockedPill = mcpMonitorT('blockedCount', { n: totals.blocked }) || monitorFallback(`安全拦截 ${totals.blocked}`);
+    const neutralPill = mcpMonitorT('neutralCount', { n: totals.neutral }) || monitorFallback(`终止 ${totals.neutral}`);
+    const rateHint = mcpMonitorT('rateExcludesBlocked') || monitorFallback('成功率仅统计成功和失败的调用，不包含安全拦截和终止');
     const rateValue = hasCalls ? `${successRate}%` : successRate;
     const blockedChip = totals.blocked > 0
         ? `<span class="mcp-stats-kpi__chip is-blocked">${escapeHtml(blockedPill)}</span>`
@@ -8763,10 +8812,10 @@ function renderMcpStatsToolTable(topTools, totals, activeToolFilter = '') {
         const isActive = activeToolFilter && monitorToolNamesEqual(activeToolFilter, rawName);
         const rateClass = effectiveTotal > 0 ? getMcpToolRateClass(toolRateNum) : 'is-muted';
         const rankClass = index === 0 ? ' rank-1' : index === 1 ? ' rank-2' : index === 2 ? ' rank-3' : '';
-        const blockedLabel = mcpMonitorT('blockedCount', { n: blocked }) || monitorFallback(`安全拦截 ${blocked}`, `Blocked ${blocked}`);
+        const blockedLabel = mcpMonitorT('blockedCount', { n: blocked }) || monitorFallback(`安全拦截 ${blocked}`);
         const rowAria = (effectiveTotal > 0
             ? (mcpMonitorT('toolRowAriaLabel', { name, total, rate: toolRate }) || `${name}，${total} 次调用，成功率 ${toolRate}%`)
-            : (mcpMonitorT('toolRowNoCompletedAriaLabel', { name, total }) || monitorFallback(`${name}，${total} 次调用，暂无完成结果，点击查看执行记录`, `${name}, ${total} calls, no completed outcomes, click to view records`)))
+            : (mcpMonitorT('toolRowNoCompletedAriaLabel', { name, total }) || monitorFallback(`${name}，${total} 次调用，暂无完成结果，点击查看执行记录`)))
             + (blocked > 0 ? ` · ${blockedLabel}` : '');
         rowsHtml += `
             <tr class="mcp-stats-tool-row${isActive ? ' is-active' : ''}"
@@ -8849,10 +8898,10 @@ function renderMcpStatsToolsPanel(topTools, totals, activeToolFilter = '') {
         const isActive = activeToolFilter && monitorToolNamesEqual(activeToolFilter, rawName);
         const rateClass = effectiveTotal > 0 ? getMcpToolRateClass(toolRateNum) : 'is-muted';
         const rankClass = index === 0 ? ' rank-1' : index === 1 ? ' rank-2' : index === 2 ? ' rank-3' : '';
-        const blockedLabel = mcpMonitorT('blockedCount', { n: blocked }) || monitorFallback(`安全拦截 ${blocked}`, `Blocked ${blocked}`);
+        const blockedLabel = mcpMonitorT('blockedCount', { n: blocked }) || monitorFallback(`安全拦截 ${blocked}`);
         const rowAria = (effectiveTotal > 0
             ? (mcpMonitorT('toolRowAriaLabel', { name, total, rate: toolRate }) || `${name}，${total} 次，成功率 ${toolRate}%`)
-            : (mcpMonitorT('toolRowNoCompletedAriaLabel', { name, total }) || monitorFallback(`${name}，${total} 次调用，暂无完成结果，点击查看执行记录`, `${name}, ${total} calls, no completed outcomes, click to view records`)))
+            : (mcpMonitorT('toolRowNoCompletedAriaLabel', { name, total }) || monitorFallback(`${name}，${total} 次调用，暂无完成结果，点击查看执行记录`)))
             + (blocked > 0 ? ` · ${blockedLabel}` : '');
         const failNote = failed > 0
             ? `<span class="mcp-stats-tool-item__fail">${escapeHtml(mcpMonitorT('failedCount', { n: failed }) || `失败 ${failed}`)}</span>`
@@ -8973,7 +9022,7 @@ function renderMonitorStats(summary = null, topTools = [], lastFetchedAt = null)
     const hasSummaryData = toolCount > 0 || totals.total > 0;
 
     if (!hasSummaryData && !showTimeline) {
-        const noStats = mcpMonitorT('noStatsData') || monitorFallback('暂无统计数据', 'No statistical data');
+        const noStats = mcpMonitorT('noStatsData') || monitorFallback('暂无统计数据');
         container.innerHTML = '<div class="monitor-empty">' + escapeHtml(noStats) + '</div>';
         const subtitle = document.getElementById('monitor-stats-subtitle');
         if (subtitle) subtitle.hidden = true;
@@ -8984,9 +9033,9 @@ function renderMonitorStats(summary = null, topTools = [], lastFetchedAt = null)
     const hasCalls = effectiveTotal > 0;
     const successRateNum = hasCalls ? (totals.success / effectiveTotal) * 100 : 0;
     const successRate = hasCalls ? successRateNum.toFixed(1) : '-';
-    const locale = (typeof window.__locale === 'string' && window.__locale.startsWith('zh')) ? 'zh-CN' : 'en-US';
-    const noCallsYet = mcpMonitorT('noCallsYet') || monitorFallback('暂无调用', 'No calls yet');
-    const noCompletedYet = mcpMonitorT('noCompletedYet') || monitorFallback('暂无有效完成', 'No completed outcomes yet');
+    const locale = 'zh-CN';
+    const noCallsYet = mcpMonitorT('noCallsYet') || monitorFallback('暂无调用');
+    const noCompletedYet = mcpMonitorT('noCompletedYet') || monitorFallback('暂无有效完成');
     const lastCallText = totals.lastCallTime
         ? (totals.lastCallTime.toLocaleString ? totals.lastCallTime.toLocaleString(locale) : String(totals.lastCallTime))
         : noCallsYet;
@@ -8994,9 +9043,9 @@ function renderMonitorStats(summary = null, topTools = [], lastFetchedAt = null)
     const rateTone = hasCalls ? getMcpStatsRateTone(successRateNum) : 'is-muted';
     let rateSubText = totals.total > 0 ? noCompletedYet : noCallsYet;
     if (hasCalls) {
-        rateSubText = mcpMonitorT('rateHealthy') || monitorFallback('运行平稳', 'Running smoothly');
-        if (successRateNum < 80) rateSubText = mcpMonitorT('rateCritical') || monitorFallback('失败率偏高', 'High failure rate');
-        else if (successRateNum < 95) rateSubText = mcpMonitorT('rateWarning') || monitorFallback('存在失败调用', 'Some failures detected');
+        rateSubText = mcpMonitorT('rateHealthy') || monitorFallback('运行平稳');
+        if (successRateNum < 80) rateSubText = mcpMonitorT('rateCritical') || monitorFallback('失败率偏高');
+        else if (successRateNum < 95) rateSubText = mcpMonitorT('rateWarning') || monitorFallback('存在失败调用');
     }
 
     const toolFilterEl = document.getElementById('monitor-tool-filter');
@@ -9040,12 +9089,12 @@ function renderMonitorExecutions(executions = [], statusFilter = 'all') {
         const toolFilter = document.getElementById('monitor-tool-filter');
         const currentToolFilter = toolFilter ? toolFilter.value : 'all';
         const hasFilter = (statusFilter && statusFilter !== 'all') || (currentToolFilter && currentToolFilter !== 'all');
-        const noRecordsFilter = typeof window.t === 'function' ? window.t('mcpMonitor.noRecordsWithFilter') : monitorFallback('当前筛选条件下暂无记录', 'No records with current filter');
-        const noExecutions = typeof window.t === 'function' ? window.t('mcpMonitor.noExecutions') : monitorFallback('暂无执行记录', 'No execution records');
+        const noRecordsFilter = typeof window.t === 'function' ? window.t('mcpMonitor.noRecordsWithFilter') : monitorFallback('当前筛选条件下暂无记录');
+        const noExecutions = typeof window.t === 'function' ? window.t('mcpMonitor.noExecutions') : monitorFallback('暂无执行记录');
         if (hasFilter) {
             container.innerHTML = '<div class="monitor-empty">' + escapeHtml(noRecordsFilter) + '</div>';
         } else {
-            const emptyHint = typeof window.t === 'function' ? window.t('mcpMonitor.emptyHint') : monitorFallback('在对话或任务中调用 MCP 工具后，执行记录将显示在此处', 'Execution records will appear here after you invoke MCP tools in chat or tasks');
+            const emptyHint = typeof window.t === 'function' ? window.t('mcpMonitor.emptyHint') : monitorFallback('在对话或任务中调用 MCP 工具后，执行记录将显示在此处');
             container.innerHTML = `<div class="monitor-empty">
                 <p class="monitor-empty__title">${escapeHtml(noExecutions)}</p>
                 <p class="monitor-empty__hint">${escapeHtml(emptyHint)}</p>
@@ -9078,14 +9127,14 @@ function renderMonitorExecutions(executions = [], statusFilter = 'all') {
         hard_timeout: 'statusHardTimeout',
         orphaned: 'statusOrphaned'
     };
-    const locale = (typeof window.__locale === 'string' && window.__locale.startsWith('zh')) ? 'zh-CN' : undefined;
+    const locale = 'zh-CN';
     const rowEntries = executions
         .map(exec => {
             const status = getToolExecutionDisplayStatus(exec);
             const statusClass = `monitor-status-chip ${status}`;
             const statusKey = statusKeyMap[status];
             const statusLabel = (typeof window.t === 'function' && statusKey) ? window.t('mcpMonitor.' + statusKey) : getStatusText(status);
-            const startTime = exec.startTime ? (new Date(exec.startTime).toLocaleString ? new Date(exec.startTime).toLocaleString(locale || 'en-US') : String(exec.startTime)) : unknownLabel;
+            const startTime = exec.startTime ? (new Date(exec.startTime).toLocaleString ? new Date(exec.startTime).toLocaleString(locale) : String(exec.startTime)) : unknownLabel;
             const duration = formatExecutionDuration(exec.startTime, exec.endTime);
             const toolName = escapeHtml(formatMonitorToolName(exec.toolName) || unknownToolLabel);
             const rawExecId = exec.id || '';
@@ -9095,7 +9144,7 @@ function renderMonitorExecutions(executions = [], statusFilter = 'all') {
                 ? `<button type="button" class="btn-secondary btn-monitor-abort" data-require-permission="monitor:write" onclick="cancelMCPToolExecution(${jsExecId})">${escapeHtml(terminateLabel)}</button>`
                 : '';
             const isSelected = monitorState.selectedExecutions.has(rawExecId);
-            const rowKey = monitorRenderKey([exec, isSelected, locale || 'en-US']);
+            const rowKey = monitorRenderKey([exec, isSelected, locale]);
             return {
                 id: rawExecId,
                 key: rowKey,
@@ -9131,7 +9180,7 @@ function renderMonitorExecutions(executions = [], statusFilter = 'all') {
     const colStartTime = typeof window.t === 'function' ? window.t('mcpMonitor.columnStartTime') : '开始时间';
     const colDuration = typeof window.t === 'function' ? window.t('mcpMonitor.columnDuration') : '耗时';
     const colActions = typeof window.t === 'function' ? window.t('mcpMonitor.columnActions') : '操作';
-    const headerKey = monitorRenderKey([colTool, colStatus, colStartTime, colDuration, colActions, locale || 'en-US']);
+    const headerKey = monitorRenderKey([colTool, colStatus, colStartTime, colDuration, colActions, locale]);
     const headerHtml = `
         <tr>
             <th style="width: 40px;">
@@ -9514,191 +9563,8 @@ function formatExecutionDuration(start, end) {
 }
 
 /**
- * 语言切换后刷新对话页已渲染的进度条、时间线标题与时间格式（避免仍显示英文或 AM/PM）
  */
-function refreshProgressAndTimelineI18n() {
-    const _t = function (k, o) {
-        return typeof window.t === 'function' ? window.t(k, o) : k;
-    };
-    const timeLocale = getCurrentTimeLocale();
-    const timeOpts = getTimeFormatOptions();
 
-    // 进度块内停止按钮：未禁用时统一为当前语言的「停止任务」（避免仍显示 Stop task）
-    document.querySelectorAll('.progress-message .progress-stop').forEach(function (btn) {
-        if (!btn.disabled && btn.id && btn.id.indexOf('-stop-btn') !== -1) {
-            const cancelling = _t('tasks.cancelling');
-            if (btn.textContent !== cancelling) {
-                btn.textContent = _t('tasks.stopTask');
-            }
-        }
-    });
-    document.querySelectorAll('.progress-toggle').forEach(function (btn) {
-        const timeline = btn.closest('.progress-container, .message-bubble') &&
-            btn.closest('.progress-container, .message-bubble').querySelector('.progress-timeline');
-        const expanded = timeline && timeline.classList.contains('expanded');
-        btn.textContent = expanded ? _t('tasks.collapseDetail') : _t('chat.expandDetail');
-    });
-    document.querySelectorAll('.progress-message').forEach(function (msgEl) {
-        const raw = msgEl.dataset.progressRawMessage;
-        const stageEl = msgEl.querySelector('.progress-stage');
-        if (stageEl && raw) {
-            let pdata = null;
-            if (msgEl.dataset.progressRawData) {
-                try {
-                    pdata = JSON.parse(msgEl.dataset.progressRawData);
-                } catch (e) {
-                    pdata = null;
-                }
-            }
-            stageEl.textContent = translateProgressMessage(raw, pdata);
-        }
-        if (msgEl.id) syncProgressElapsedSummary(msgEl.id);
-    });
-
-    // 时间线项：按类型重算标题，并重绘时间戳
-    document.querySelectorAll('.timeline-item').forEach(function (item) {
-        const type = item.dataset.timelineType;
-        const titleSpan = item.querySelector('.timeline-item-title');
-        const timeSpan = item.querySelector('.timeline-item-time');
-        if (!titleSpan) return;
-        const ap = (item.dataset.einoAgent && item.dataset.einoAgent !== '') ? ('[' + item.dataset.einoAgent + '] ') : '';
-        if (type === 'iteration' && item.dataset.iterationN) {
-            const n = parseInt(item.dataset.iterationN, 10) || 1;
-            const scope = item.dataset.einoScope;
-            if (item.dataset.orchestration === 'plan_execute' && scope === 'main') {
-                const phase = typeof translatePlanExecuteAgentName === 'function'
-                    ? translatePlanExecuteAgentName(item.dataset.einoAgent) : (item.dataset.einoAgent || '');
-                titleSpan.textContent = _t('chat.einoPlanExecuteRound', { n: n, phase: phase });
-            } else if (scope === 'main') {
-                titleSpan.textContent = _t('chat.einoOrchestratorRound', { n: n });
-            } else if (scope === 'sub') {
-                const agent = item.dataset.einoAgent || '';
-                titleSpan.textContent = _t('chat.einoSubAgentStep', { n: n, agent: agent });
-            } else {
-                titleSpan.textContent = ap + _t('chat.iterationRound', { n: n });
-            }
-        } else if (type === 'thinking') {
-            if (item.dataset.responseStreamPlaceholder === '1' && typeof einoMainStreamPlanningTitle === 'function') {
-                titleSpan.textContent = einoMainStreamPlanningTitle({
-                    orchestration: item.dataset.orchestration || '',
-                    einoAgent: item.dataset.einoAgent || ''
-                });
-            } else if (item.dataset.orchestration === 'plan_execute' && item.dataset.einoAgent && typeof einoMainStreamPlanningTitle === 'function') {
-                titleSpan.textContent = einoMainStreamPlanningTitle({
-                    orchestration: 'plan_execute',
-                    einoAgent: item.dataset.einoAgent
-                });
-            } else {
-                titleSpan.textContent = ap + '\uD83E\uDD14 ' + _t('chat.aiThinking');
-            }
-        } else if (type === 'reasoning_chain') {
-            titleSpan.textContent = ap + '\uD83D\uDD17 ' + _t('chat.reasoningChain');
-        } else if (type === 'planning') {
-            if (item.dataset.orchestration && typeof einoMainStreamPlanningTitle === 'function') {
-                titleSpan.textContent = einoMainStreamPlanningTitle({
-                    orchestration: item.dataset.orchestration,
-                    einoAgent: item.dataset.einoAgent || ''
-                });
-            } else {
-                titleSpan.textContent = ap + '\uD83D\uDCDD ' + _t('chat.planning');
-            }
-        } else if (type === 'tool_calls_detected' && item.dataset.toolCallsCount != null) {
-            const count = parseInt(item.dataset.toolCallsCount, 10) || 0;
-            titleSpan.textContent = ap + '\uD83D\uDD27 ' + _t('chat.toolCallsDetected', { count: count });
-        } else if (type === 'tool_call' && (item.dataset.toolName !== undefined || item.dataset.toolIndex !== undefined)) {
-            const name = (item.dataset.toolName != null && item.dataset.toolName !== '') ? item.dataset.toolName : _t('chat.unknownTool');
-            const index = parseInt(item.dataset.toolIndex, 10) || 0;
-            const total = parseInt(item.dataset.toolTotal, 10) || 0;
-            const callTitle = typeof formatToolCallTimelineTitle === 'function'
-                ? formatToolCallTimelineTitle(name, index, total)
-                : _t('chat.callTool', { name: name, index: index, total: total });
-            titleSpan.textContent = ap + '\uD83D\uDD27 ' + callTitle;
-            if (item.dataset.toolDisplayStatus) {
-                applyToolCallStatus(item, item.dataset.toolDisplayStatus);
-            }
-        } else if (type === 'tool_result' && (item.dataset.toolName !== undefined || item.dataset.toolSuccess !== undefined)) {
-            const name = (item.dataset.toolName != null && item.dataset.toolName !== '') ? item.dataset.toolName : _t('chat.unknownTool');
-            const displayStatus = item.dataset.toolDisplayStatus || '';
-            const backgroundRunning = displayStatus === 'background_running';
-            const success = item.dataset.toolSuccess === '1';
-            const icon = displayStatus === 'blocked' ? '🛡 ' : (backgroundRunning ? '\u23F3 ' : (success ? '\u2705 ' : '\u274C '));
-            titleSpan.textContent = ap + icon + (displayStatus === 'blocked' ? _t('chat.toolExecBlocked', { name: name }) : backgroundRunning ? (getBackgroundRunningToolLabel() + ': ' + name) : (success ? _t('chat.toolExecComplete', { name: name }) : _t('chat.toolExecFailed', { name: name })));
-        } else if (type === 'eino_agent_reply') {
-            titleSpan.textContent = ap + '\uD83D\uDCAC ' + _t('chat.einoAgentReplyTitle');
-        } else if (type === 'eino_usage_summary') {
-            const usageData = {
-                modelCalls: item.dataset.modelCalls,
-                promptTokens: item.dataset.promptTokens,
-                completionTokens: item.dataset.completionTokens,
-                totalTokens: item.dataset.totalTokens,
-                cachedTokens: item.dataset.cachedTokens,
-                reasoningTokens: item.dataset.reasoningTokens
-            };
-            titleSpan.textContent = formatEinoUsageSummaryTitle(usageData);
-            const contentEl = item.querySelector('.timeline-usage-summary');
-            if (contentEl) {
-                setTimelineItemContentStreamPlain(contentEl, formatEinoUsageSummaryMessage(usageData));
-            }
-        } else if (type === 'cancelled') {
-            titleSpan.textContent = '\u26D4 ' + _t('chat.taskCancelled');
-        } else if (type === 'user_interrupt_continue') {
-            titleSpan.textContent = _t('chat.userInterruptContinueTitle');
-        } else if (type === 'progress' && item.dataset.progressMessage !== undefined) {
-            titleSpan.textContent = typeof window.translateProgressMessage === 'function' ? window.translateProgressMessage(item.dataset.progressMessage) : item.dataset.progressMessage;
-        }
-        if (timeSpan && item.dataset.createdAtIso) {
-            const d = new Date(item.dataset.createdAtIso);
-            if (!isNaN(d.getTime())) {
-                timeSpan.textContent = d.toLocaleTimeString(timeLocale, timeOpts);
-            }
-        }
-        if (item.classList.contains('tool-detail-collapsible') && typeof updateToolDetailToggleLabel === 'function') {
-            updateToolDetailToggleLabel(item);
-        }
-    });
-
-    document.querySelectorAll('.timeline-live-pruned-marker').forEach(function (marker) {
-        marker.textContent = formatLiveTimelinePrunedMarker(marker);
-    });
-
-    // 详情区「展开/收起」按钮
-    document.querySelectorAll('.process-detail-btn span').forEach(function (span) {
-        const btn = span.closest('.process-detail-btn');
-        const assistantId = btn && btn.closest('.message.assistant') && btn.closest('.message.assistant').id;
-        if (!assistantId) return;
-        const detailsId = 'process-details-' + assistantId;
-        const timeline = document.getElementById(detailsId) && document.getElementById(detailsId).querySelector('.progress-timeline');
-        const expanded = timeline && timeline.classList.contains('expanded');
-        span.textContent = expanded ? _t('tasks.collapseDetail') : _t('chat.expandDetail');
-    });
-
-    document.querySelectorAll('#chat-messages .message.assistant').forEach(function (msgEl) {
-        if (typeof window.syncAssistantTurnSummary === 'function') {
-            window.syncAssistantTurnSummary(msgEl);
-        }
-        if (typeof window.syncMcpToolsToggleButton === 'function') {
-            window.syncMcpToolsToggleButton(msgEl);
-        }
-    });
-
-    const copyLabel = _t('common.copy');
-    const copyTitle = _t('chat.copyMessageTitle');
-    document.querySelectorAll('#chat-messages .message-copy-btn').forEach(function (btn) {
-        if (btn.dataset.copySuccessActive === '1') return;
-        const span = btn.querySelector('span');
-        if (span) span.textContent = copyLabel;
-        btn.title = copyTitle;
-        btn.setAttribute('aria-label', copyTitle);
-    });
-}
-
-document.addEventListener('languagechange', function () {
-    updateBatchActionsState();
-    loadActiveTasks();
-    refreshProgressAndTimelineI18n();
-    syncAllMonitorFilterSelects();
-    refreshMonitorPanelFromState();
-});
 
 document.addEventListener('DOMContentLoaded', function () {
     initMonitorFilterSelects();

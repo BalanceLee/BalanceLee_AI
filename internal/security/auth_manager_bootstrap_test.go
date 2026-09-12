@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestAttachRBACStoreBootstrapsAdminPassword(t *testing.T) {
+func TestAttachAdminStoreBootstrapsAdminPassword(t *testing.T) {
 	db, err := database.NewDB(filepath.Join(t.TempDir(), "auth-bootstrap.db"), zap.NewNop())
 	if err != nil {
 		t.Fatalf("NewDB: %v", err)
@@ -17,9 +17,9 @@ func TestAttachRBACStoreBootstrapsAdminPassword(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 
 	manager := NewAuthManager(12)
-	generated, err := manager.AttachRBACStore(db)
+	generated, err := manager.AttachAdminStore(db)
 	if err != nil {
-		t.Fatalf("AttachRBACStore: %v", err)
+		t.Fatalf("AttachAdminStore: %v", err)
 	}
 	if generated == "" {
 		t.Fatal("expected generated admin password on first bootstrap")
@@ -28,9 +28,9 @@ func TestAttachRBACStoreBootstrapsAdminPassword(t *testing.T) {
 		t.Fatal("generated password should authenticate admin")
 	}
 
-	second, err := manager.AttachRBACStore(db)
+	second, err := manager.AttachAdminStore(db)
 	if err != nil {
-		t.Fatalf("AttachRBACStore second call: %v", err)
+		t.Fatalf("AttachAdminStore second call: %v", err)
 	}
 	if second != "" {
 		t.Fatalf("expected no password on second bootstrap, got %q", second)

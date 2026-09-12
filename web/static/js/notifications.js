@@ -40,14 +40,6 @@
     }
 
     function getLocale() {
-        if (typeof window !== 'undefined') {
-            if (typeof window.__locale === 'string' && window.__locale) {
-                return window.__locale;
-            }
-            if (typeof window.currentLang === 'string' && window.currentLang) {
-                return window.currentLang;
-            }
-        }
         return 'zh-CN';
     }
 
@@ -86,7 +78,7 @@
     async function fetchNotificationSummary() {
         const url = '/api/notifications/summary?since='
             + encodeURIComponent(String(state.lastSeenAt || 0))
-            + '&limit=80&lang=' + encodeURIComponent(getLocale());
+            + '&limit=80';
         try {
             const summary = await apiJson(url);
             if (summary && typeof summary === 'object') {
@@ -340,10 +332,7 @@
         if (!bellBtn) return;
         document.addEventListener('click', handleDocumentClick);
         document.addEventListener('visibilitychange', scheduleNextPoll);
-        document.addEventListener('languagechange', function () {
-            refreshNotifications();
-        });
-        refreshNotifications();
+                refreshNotifications();
         scheduleNextPoll();
     }
 

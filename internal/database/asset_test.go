@@ -153,10 +153,6 @@ func TestAssetAccessFiltersOwners(t *testing.T) {
 	if err != nil || len(assets) != 1 || !db.UserCanAccessResource("user-a", RBACScopeAssigned, "asset", assets[0].ID) {
 		t.Fatalf("creator assignment missing: assets=%d err=%v", len(assets), err)
 	}
-	options, err := db.ListAssignableRBACResources("asset", "10.0.0.1", 10)
-	if err != nil || len(options) != 1 {
-		t.Fatalf("asset resource picker: options=%#v err=%v", options, err)
-	}
 	project, err := db.CreateProject(&Project{Name: "Alpha", Status: "active"})
 	if err != nil {
 		t.Fatal(err)

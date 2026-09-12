@@ -8,10 +8,6 @@ let authScope = '';
 let authPromise = null;
 let authPromiseResolvers = [];
 let isAppInitialized = false;
-let robotBindingCountdownTimer = null;
-let robotBindingExpiresAt = 0;
-let robotBindingLifetimeMs = 5 * 60 * 1000;
-let activeRobotBindingCode = '';
 
 function isTokenValid() {
     return !!authToken && authTokenExpiry instanceof Date && authTokenExpiry.getTime() > Date.now();
@@ -347,7 +343,7 @@ async function refreshAppData(showTaskErrors = false) {
 
 async function bootstrapApp() {
     if (!isAppInitialized) {
-        // 等待 i18n 首包加载完成后再插系统就绪消息，避免清除缓存后语言显示 English 气泡仍是中文
+        // 等待中文文案加载完成后再插入系统就绪消息。
         try {
             if (window.i18nReady && typeof window.i18nReady.then === 'function') {
                 await window.i18nReady;
@@ -475,7 +471,7 @@ function applyPermissionElement(el) {
     if (!anyOf && !permission) return;
     const allowed = permissionAllowedForElement(el);
     el.hidden = !allowed;
-    el.classList.toggle('rbac-permission-denied', !allowed);
+    el.classList.toggle('permission-denied', !allowed);
     if ('disabled' in el) {
         el.disabled = !allowed;
     }
@@ -632,7 +628,7 @@ function formatDuration(ms) {
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
-    
+
     if (hours > 0) {
         return `${hours}小时${minutes % 60}分钟`;
     } else if (minutes > 0) {
@@ -712,7 +708,7 @@ async function initializeApp() {
 function toggleUserMenu() {
     const dropdown = document.getElementById('user-menu-dropdown');
     if (!dropdown) return;
-    
+
     const isVisible = dropdown.style.display !== 'none';
     setUserMenuOpen(!isVisible);
 }
@@ -721,205 +717,26 @@ function toggleUserMenu() {
 document.addEventListener('click', function(event) {
     const dropdown = document.getElementById('user-menu-dropdown');
     const avatarBtn = document.querySelector('.user-avatar-btn');
-    
-    if (dropdown && avatarBtn && 
-        !dropdown.contains(event.target) && 
+
+    if (dropdown && avatarBtn &&
+        !dropdown.contains(event.target) &&
         !avatarBtn.contains(event.target)) {
         setUserMenuOpen(false);
     }
 });
 
-document.addEventListener('languagechange', function () {
-    renderUserMenuProfile();
-});
 
-async function openRobotAccountBinding() {
-    setUserMenuOpen(false);
-    openAppModal('robot-account-binding-modal');
-    if (robotBindingExpiresAt) updateRobotBindingCountdown();
-    await loadRobotAccountBindings();
-}
 
-function closeRobotAccountBinding() {
-    closeAppModal('robot-account-binding-modal');
-	if (typeof window.loadVulnerabilityAlertSubscription === 'function') {
-		window.loadVulnerabilityAlertSubscription();
-	}
-}
 
-async function generateRobotBindingCode() {
-    const generateBtn = document.getElementById('robot-binding-generate-btn');
-    if (generateBtn) {
-        generateBtn.disabled = true;
-        generateBtn.textContent = '正在生成…';
-    }
-    let response;
-    let data;
-    try {
-        response = await apiFetch('/api/auth/robot-binding-code', { method: 'POST' });
-        data = await response.json().catch(() => ({}));
-    } catch (error) {
-        if (typeof showNotification === 'function') showNotification('生成绑定码失败，请检查网络连接', 'error');
-        resetRobotBindingGenerateButton();
-        return;
-    }
-    if (!response.ok || !data.code) {
-        if (typeof showNotification === 'function') showNotification(data.error || '生成绑定码失败', 'error');
-        resetRobotBindingGenerateButton();
-        return;
-    }
-    const codeEl = document.getElementById('robot-binding-code');
-    const copyBtn = document.getElementById('robot-binding-copy-btn');
-    const card = document.getElementById('robot-binding-code-card');
-    const timer = document.getElementById('robot-binding-timer');
-    const state = document.getElementById('robot-binding-code-state');
-    activeRobotBindingCode = data.code;
-    robotBindingLifetimeMs = Math.max(1000, Number(data.expires_in_seconds || 300) * 1000);
-    // Use the server-provided duration instead of comparing wall clocks, so a
-    // client machine with clock skew still gets an accurate countdown.
-    robotBindingExpiresAt = Date.now() + robotBindingLifetimeMs;
-    if (codeEl) codeEl.textContent = data.code;
-    if (copyBtn) copyBtn.disabled = false;
-    if (card) card.className = 'robot-binding-code-card is-active';
-    if (timer) timer.hidden = false;
-    if (state) state.textContent = '等待绑定';
-    if (generateBtn) {
-        generateBtn.disabled = false;
-        generateBtn.textContent = '重新生成';
-    }
-    startRobotBindingCountdown();
-}
 
-function resetRobotBindingGenerateButton() {
-    const generateBtn = document.getElementById('robot-binding-generate-btn');
-    if (generateBtn) {
-        generateBtn.disabled = false;
-        generateBtn.textContent = activeRobotBindingCode ? '重新生成' : '生成绑定码';
-    }
-}
 
-function startRobotBindingCountdown() {
-    if (robotBindingCountdownTimer) clearInterval(robotBindingCountdownTimer);
-    updateRobotBindingCountdown();
-    robotBindingCountdownTimer = setInterval(updateRobotBindingCountdown, 250);
-}
 
-function updateRobotBindingCountdown() {
-    if (!robotBindingExpiresAt) return;
-    const remaining = Math.max(0, robotBindingExpiresAt - Date.now());
-    const seconds = Math.ceil(remaining / 1000);
-    const minutesPart = String(Math.floor(seconds / 60)).padStart(2, '0');
-    const secondsPart = String(seconds % 60).padStart(2, '0');
-    const countdown = document.getElementById('robot-binding-countdown');
-    const progress = document.getElementById('robot-binding-progress-bar');
-    const expiry = document.getElementById('robot-binding-expiry');
-    if (countdown) countdown.textContent = `${minutesPart}:${secondsPart}`;
-    if (progress) progress.style.width = `${Math.max(0, Math.min(100, remaining / robotBindingLifetimeMs * 100))}%`;
-    if (expiry && activeRobotBindingCode) expiry.textContent = `请发送：绑定 ${activeRobotBindingCode}`;
-    if (remaining <= 0) expireRobotBindingCode();
-}
-
-function expireRobotBindingCode() {
-    if (robotBindingCountdownTimer) clearInterval(robotBindingCountdownTimer);
-    robotBindingCountdownTimer = null;
-    robotBindingExpiresAt = 0;
-    activeRobotBindingCode = '';
-    const card = document.getElementById('robot-binding-code-card');
-    const codeEl = document.getElementById('robot-binding-code');
-    const state = document.getElementById('robot-binding-code-state');
-    const expiry = document.getElementById('robot-binding-expiry');
-    const countdown = document.getElementById('robot-binding-countdown');
-    const progress = document.getElementById('robot-binding-progress-bar');
-    const copyBtn = document.getElementById('robot-binding-copy-btn');
-    if (card) card.className = 'robot-binding-code-card is-expired';
-    if (codeEl) codeEl.textContent = '已失效';
-    if (state) state.textContent = '已过期';
-    if (expiry) expiry.textContent = '绑定码已过期，请重新生成';
-    if (countdown) countdown.textContent = '00:00';
-    if (progress) progress.style.width = '0%';
-    if (copyBtn) copyBtn.disabled = true;
-    resetRobotBindingGenerateButton();
-    const generateBtn = document.getElementById('robot-binding-generate-btn');
-    if (generateBtn) generateBtn.textContent = '重新生成';
-    loadRobotAccountBindings();
-}
-
-async function copyRobotBindingCode() {
-    if (!activeRobotBindingCode || !robotBindingExpiresAt || robotBindingExpiresAt <= Date.now()) return;
-    const command = `绑定 ${activeRobotBindingCode}`;
-    try {
-        await navigator.clipboard.writeText(command);
-    } catch (_) {
-        const textarea = document.createElement('textarea');
-        textarea.value = command;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        textarea.remove();
-    }
-    const copyBtn = document.getElementById('robot-binding-copy-btn');
-    const label = copyBtn?.querySelector('span');
-    if (label) label.textContent = '已复制';
-    setTimeout(() => { if (label) label.textContent = '复制命令'; }, 1400);
-    if (typeof showNotification === 'function') showNotification('绑定命令已复制', 'success');
-}
-
-async function loadRobotAccountBindings() {
-    const list = document.getElementById('robot-account-binding-list');
-    if (!list) return;
-    const response = await apiFetch('/api/auth/robot-bindings');
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-        list.textContent = data.error || '获取绑定失败';
-        return;
-    }
-    const bindings = Array.isArray(data.bindings) ? data.bindings : [];
-    if (!bindings.length) {
-        list.innerHTML = `<div class="robot-binding-empty-state">
-            <span class="robot-binding-empty-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="2"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="2"/></svg></span>
-            <div><strong>暂无绑定账号</strong><p>生成绑定码并在机器人中发送，即可完成首次绑定。</p></div>
-        </div>`;
-        return;
-    }
-    const platformLabels = { wechat: '微信', wecom: '企业微信', dingtalk: '钉钉', lark: '飞书', telegram: 'Telegram', slack: 'Slack', discord: 'Discord', qq: 'QQ' };
-    list.innerHTML = bindings.map(binding => `
-        <div class="robot-binding-account-card">
-            <span class="robot-binding-platform-icon">${escapeHtml((platformLabels[binding.platform] || binding.platform || '?').slice(0, 1).toUpperCase())}</span>
-            <div class="robot-binding-account-main">
-                <div class="robot-binding-account-name"><strong>${escapeHtml(platformLabels[binding.platform] || binding.platform || '-')}</strong><span>已连接</span></div>
-                <small>账号标识 ${escapeHtml(binding.external_user_hint || '-')} · 更新于 ${escapeHtml(formatRobotBindingTime(binding.updated_at))}</small>
-            </div>
-            <button type="button" class="btn-secondary btn-small robot-binding-unbind-btn" onclick="deleteRobotAccountBinding(${escapeJsStringAttr(binding.id || '')})">解除绑定</button>
-        </div>`).join('');
-	if (typeof window.loadVulnerabilityAlertSubscription === 'function') {
-		window.loadVulnerabilityAlertSubscription();
-	}
-}
-
-function formatRobotBindingTime(value) {
-    const date = new Date(value || '');
-    if (Number.isNaN(date.getTime())) return '未知时间';
-    return date.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-}
-
-async function deleteRobotAccountBinding(id) {
-    if (!id || !window.confirm('确定解除该机器人账号绑定吗？')) return;
-    const response = await apiFetch(`/api/auth/robot-bindings/${encodeURIComponent(id)}`, { method: 'DELETE' });
-    if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        if (typeof showNotification === 'function') showNotification(data.error || '解绑失败', 'error');
-        return;
-    }
-    await loadRobotAccountBindings();
-}
 
 // 退出登录
 async function logout() {
     // 关闭下拉菜单
     setUserMenuOpen(false);
-    
+
     try {
         // 先尝试调用退出API（如果token有效）
         if (authToken) {
@@ -944,11 +761,6 @@ async function logout() {
 
 // 导出函数供HTML使用
 window.toggleUserMenu = toggleUserMenu;
-window.openRobotAccountBinding = openRobotAccountBinding;
-window.closeRobotAccountBinding = closeRobotAccountBinding;
-window.generateRobotBindingCode = generateRobotBindingCode;
-window.copyRobotBindingCode = copyRobotBindingCode;
-window.deleteRobotAccountBinding = deleteRobotAccountBinding;
 window.logout = logout;
 window.hasPermission = hasPermission;
 window.hasAnyPermission = hasAnyPermission;

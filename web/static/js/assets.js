@@ -68,8 +68,8 @@ function closeAssetCustomSelects() {
 }
 
 function assetT(key, fallback, options) {
-    if (window.i18next && typeof window.i18next.t === 'function') {
-        const value = window.i18next.t(key, options || {});
+    if (typeof window.t === 'function') {
+        const value = window.t(key, options || {});
         if (value && value !== key) return value;
     }
     return fallback;
@@ -1804,4 +1804,3 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.key === 'Escape') closeAssetBatchMenu();
     });
 });
-document.addEventListener('languagechange', () => ASSET_CUSTOM_SELECT_IDS.forEach(syncAssetSelect));

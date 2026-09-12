@@ -151,7 +151,7 @@ async function refreshDashboard() {
             // HITL 待审批：用于「需要立即处理」告警条 + 推荐操作
             fetchJson('/api/hitl/pending'),
             // 通知摘要：since=0 拿最新一批，limit 控制大小；用于「最近事件」内联展示
-            fetchJson('/api/notifications/summary?since=0&limit=20&lang=' + encodeURIComponent((window.__locale || 'zh-CN'))),
+            fetchJson('/api/notifications/summary?since=0&limit=20'),
             // External MCP 健康度
             fetchJson('/api/external-mcp/stats'),
             // WebShell 已建立的连接（pentest 落地后的 foothold，对运营场景非常关键）
@@ -2481,23 +2481,6 @@ function arcSegmentPath(cx, cy, rOuter, rInner, angleStart, angleEnd) {
         ' L ' + x2Inner.toFixed(2) + ' ' + y2Inner.toFixed(2) +
         ' A ' + rInner + ' ' + rInner + ' 0 ' + largeArc + ' 0 ' + x1Inner.toFixed(2) + ' ' + y1Inner.toFixed(2) + ' Z';
 }
-
-// 语言切换后，仪表盘上由 JS 动态渲染的部分（KPI 副标、告警条、半环图标签、
-// 状态卡、最近漏洞列表、能力总览徽章等）不会被 applyTranslations 自动重绘，
-// 需要主动重新拉取数据并以新语言重新渲染；与 tasks/vulnerability 等其他页面保持一致。
-document.addEventListener('languagechange', function () {
-    try {
-        var dashboardPage = document.getElementById('page-dashboard');
-        if (!dashboardPage || !dashboardPage.classList.contains('active')) {
-            return;
-        }
-        if (typeof refreshDashboard === 'function') {
-            refreshDashboard();
-        }
-    } catch (e) {
-        console.warn('languagechange dashboard refresh failed', e);
-    }
-});
 
 // 页面可见性：从其他 tab 切回时，如果距离上次刷新已经过半个轮询周期，立刻补刷一次；
 // 避免后台标签页停留几小时回来时数据还是旧的，又不至于每次切回都打接口。

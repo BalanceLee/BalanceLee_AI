@@ -95,7 +95,7 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 
 	// 认证管理器（数据库初始化后挂载 RBAC）
 	authManager := security.NewAuthManager(cfg.Auth.SessionDurationHours)
-	if generatedPassword, err := authManager.AttachRBACStore(db); err != nil {
+	if generatedPassword, err := authManager.AttachAdminStore(db); err != nil {
 		return nil, fmt.Errorf("初始化RBAC失败: %w", err)
 	} else if generatedPassword != "" {
 		config.PrintBootstrapAdminPassword(generatedPassword)
@@ -405,11 +405,9 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 	}
 	c2Handler := handler.NewC2Handler(c2Manager, log.Logger)
 
-	// 创建OpenAPI处理器
 	conversationHandler := handler.NewConversationHandler(db, log.Logger)
 	conversationHandler.SetTaskStopper(agentHandler)
 	conversationHandler.SetTaskStateProvider(agentHandler)
-	openAPIHandler := handler.NewOpenAPIHandler(db, log.Logger, conversationHandler, agentHandler)
 
 	// 创建 App 实例（部分字段稍后填充）
 	app := &App{
@@ -532,7 +530,6 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 		app.c2Handler,
 		mcpServer,
 		authManager,
-		openAPIHandler,
 	)
 
 	return app, nil
@@ -733,7 +730,6 @@ func setupRoutes(
 	c2Handler *handler.C2Handler,
 	mcpServer *mcp.Server,
 	authManager *security.AuthManager,
-	openAPIHandler *handler.OpenAPIHandler,
 ) {
 	// API路由
 	api := router.Group("/api")
@@ -879,6 +875,7 @@ func setupRoutes(
 
 		// 攻击链可视化
 		protected.GET("/attack-chain/:conversationId", attackChainHandler.GetAttackChain)
+		protected.GET("/attack-chain/:conversationId/live", attackChainHandler.GetLiveAttackChain)
 		protected.POST("/attack-chain/:conversationId/regenerate", attackChainHandler.RegenerateAttackChain)
 
 		// 知识库管理（始终注册路由，通过 App 实例动态获取 handler）
@@ -1174,18 +1171,7 @@ func setupRoutes(
 		protected.POST("/mcp", func(c *gin.Context) {
 			mcpServer.HandleHTTP(c.Writer, c.Request)
 		})
-
-		// OpenAPI结果聚合端点（可选，用于获取对话的完整结果）
-		protected.GET("/conversations/:id/results", openAPIHandler.GetConversationResults)
 	}
-
-	// OpenAPI规范（需要认证，避免暴露API结构信息）
-	protected.GET("/openapi/spec", openAPIHandler.GetOpenAPISpec)
-
-	// API文档页面（公开访问，但需要登录后才能使用API）
-	router.GET("/api-docs", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "api-docs.html", nil)
-	})
 
 	// 静态文件
 	router.Static("/static", "./web/static")

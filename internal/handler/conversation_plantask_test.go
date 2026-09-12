@@ -37,10 +37,10 @@ func TestGetConversationPlanTasksRequiresAccessAndReportsProgress(t *testing.T) 
 	if err != nil {
 		t.Fatalf("CreateConversation: %v", err)
 	}
-	user, err := db.CreateRBACUser("plan-user", "Plan User", "hash", true, nil)
-	if err != nil {
-		t.Fatalf("CreateRBACUser: %v", err)
+	if err := db.BootstrapAdmin("hash"); err != nil {
+		t.Fatalf("BootstrapAdmin: %v", err)
 	}
+	user := &database.RBACUser{ID: "admin", Username: "admin"}
 	base := filepath.Join(tmp, "plantask")
 	db.SetEinoConversationDirs(base, "", "", "")
 	dir := filepath.Join(base, conversation.ID)
@@ -110,10 +110,10 @@ func TestGetConversationPlanTasksReportsStoppedLiveTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateConversation: %v", err)
 	}
-	user, err := db.CreateRBACUser("stopped-plan-user", "Stopped Plan User", "hash", true, nil)
-	if err != nil {
-		t.Fatalf("CreateRBACUser: %v", err)
+	if err := db.BootstrapAdmin("hash"); err != nil {
+		t.Fatalf("BootstrapAdmin: %v", err)
 	}
+	user := &database.RBACUser{ID: "admin", Username: "admin"}
 	if err := db.AssignResourceToUser(user.ID, "conversation", conversation.ID); err != nil {
 		t.Fatalf("AssignResourceToUser: %v", err)
 	}

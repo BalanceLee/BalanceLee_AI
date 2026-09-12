@@ -177,48 +177,77 @@ func (h *C2Handler) UpdateListener(c *gin.Context) {
 		return
 	}
 
-	// 若监听器在运行，不能修改关键字段
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "监听器名称不能为空"})
+		return
+	}
+	if err := c2.SafeBindPort(req.BindPort); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	bindHost := strings.TrimSpace(req.BindHost)
+	if bindHost == "" {
+		bindHost = "127.0.0.1"
+	}
+	projectID := strings.TrimSpace(req.ProjectID)
+	profileID := strings.TrimSpace(req.ProfileID)
+
+	cfg := &c2.ListenerConfig{}
+	raw := strings.TrimSpace(listener.ConfigJSON)
+	if raw == "" {
+		raw = "{}"
+	}
+	if err := json.Unmarshal([]byte(raw), cfg); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "监听器配置损坏，无法更新"})
+		return
+	}
+	if req.Config != nil {
+		cfg = req.Config
+	}
+	if req.CallbackHost != nil {
+		cfg.CallbackHost = strings.TrimSpace(*req.CallbackHost)
+	}
+	cfg.ApplyDefaults()
+	cfgJSON, err := json.Marshal(cfg)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	if h.mgr().IsListenerRunning(id) {
-		if req.BindHost != listener.BindHost || req.BindPort != listener.BindPort {
-			c.JSON(http.StatusConflict, gin.H{"error": "cannot modify bind address while listener is running"})
+		currentCfg := &c2.ListenerConfig{}
+		_ = json.Unmarshal([]byte(raw), currentCfg)
+		currentCfg.ApplyDefaults()
+		currentCfgJSON, _ := json.Marshal(currentCfg)
+		if bindHost != listener.BindHost || req.BindPort != listener.BindPort ||
+			profileID != strings.TrimSpace(listener.ProfileID) || string(cfgJSON) != string(currentCfgJSON) {
+			c.JSON(http.StatusConflict, gin.H{"error": "监听器运行中，请停止后再修改监听地址或运行配置"})
 			return
 		}
 	}
 
-	listener.Name = req.Name
-	listener.ProjectID = strings.TrimSpace(req.ProjectID)
-	listener.BindHost = req.BindHost
-	listener.BindPort = req.BindPort
-	listener.ProfileID = req.ProfileID
-	listener.Remark = req.Remark
-	if req.Config != nil {
-		cfgJSON, _ := json.Marshal(req.Config)
-		listener.ConfigJSON = string(cfgJSON)
-	}
-	if !h.canAccessProject(c, listener.ProjectID) {
+	if !h.canAccessProject(c, projectID) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "project access denied"})
 		return
 	}
-	if req.CallbackHost != nil {
-		cfg := &c2.ListenerConfig{}
-		raw := strings.TrimSpace(listener.ConfigJSON)
-		if raw == "" {
-			raw = "{}"
-		}
-		_ = json.Unmarshal([]byte(raw), cfg)
-		cfg.CallbackHost = strings.TrimSpace(*req.CallbackHost)
-		cfg.ApplyDefaults()
-		cfgJSON, err := json.Marshal(cfg)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		listener.ConfigJSON = string(cfgJSON)
-	}
+
+	listener.Name = name
+	listener.ProjectID = projectID
+	listener.BindHost = bindHost
+	listener.BindPort = req.BindPort
+	listener.ProfileID = profileID
+	listener.Remark = strings.TrimSpace(req.Remark)
+	listener.ConfigJSON = string(cfgJSON)
 
 	if err := h.mgr().DB().UpdateC2Listener(listener); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	if h.audit != nil {
+		h.audit.RecordOK(c, "c2", "listener_update", "更新 C2 监听器", "c2_listener", listener.ID, map[string]interface{}{
+			"name": listener.Name, "bind": listener.BindHost, "port": listener.BindPort,
+		})
 	}
 	listener.EncryptionKey = ""
 	listener.ImplantToken = ""

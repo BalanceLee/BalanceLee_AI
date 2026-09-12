@@ -3035,43 +3035,7 @@
         });
     }
 
-    function refreshWorkflowsI18n() {
-        const page = document.getElementById('page-workflows');
-        if (page && typeof window.applyTranslations === 'function') {
-            window.applyTranslations(page);
-        }
-        ['workflow-dry-run-modal', 'workflow-ai-modal', 'workflow-package-import-modal', 'workflow-package-overwrite-modal'].forEach(function (id) {
-            const modal = document.getElementById(id);
-            if (modal && typeof window.applyTranslations === 'function') window.applyTranslations(modal);
-        });
-        const connectBtn = document.getElementById('workflow-connect-btn');
-        if (connectBtn) {
-            connectBtn.setAttribute('aria-pressed', connectMode ? 'true' : 'false');
-            const label = connectBtn.querySelector('.workflow-toolbar-label');
-            if (label) label.textContent = connectMode ? _t('workflows.connecting') : _t('workflows.connect');
-        }
-        refreshCanvasLabels();
-        updateWorkflowCanvasTitle();
-        renderWorkflowList();
-        if (selectedElement && selectedElement.length) {
-            selectWorkflowElement(selectedElement);
-        } else {
-            selectWorkflowElement(null);
-        }
-        if (typeof loadWorkflowOptionsForRoleModal === 'function') {
-            loadWorkflowOptionsForRoleModal();
-        }
-        if (workflowPackageState.importRecord) {
-            renderWorkflowPackageImportResult(workflowPackageState.importRecord);
-        } else {
-            renderWorkflowPackageInspection();
-            renderWorkflowPackageResolution();
-        }
-    }
 
-    document.addEventListener('languagechange', function () {
-        refreshWorkflowsI18n();
-    });
 
     document.addEventListener('click', function (event) {
         const menu = document.getElementById('workflow-more-actions');

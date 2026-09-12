@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -116,6 +117,29 @@ func (h *AttackChainHandler) GetAttackChain(c *gin.Context) {
 	// 生成完成后，从锁映射中删除（可选，保留也可以用于防止短时间内重复生成）
 	// h.generatingLocks.Delete(conversationID)
 
+	c.JSON(http.StatusOK, chain)
+}
+
+// GetLiveAttackChain projects persisted tool events into a graph without
+// invoking the model, allowing the UI to refresh it while a task is running.
+func (h *AttackChainHandler) GetLiveAttackChain(c *gin.Context) {
+	c.Header("Cache-Control", "no-store, no-cache, must-revalidate")
+	c.Header("Pragma", "no-cache")
+	conversationID := strings.TrimSpace(c.Param("conversationId"))
+	if conversationID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "conversationId is required"})
+		return
+	}
+	if _, err := h.db.GetConversation(conversationID); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "对话不存在"})
+		return
+	}
+	chain, err := attackchain.BuildLiveChain(h.db, conversationID)
+	if err != nil {
+		h.logger.Error("构建实时攻击图失败", zap.String("conversationId", conversationID), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "构建实时攻击图失败: " + err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, chain)
 }
 

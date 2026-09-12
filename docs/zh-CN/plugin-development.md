@@ -103,7 +103,7 @@ Burp 插件目录包含 Java 源码和构建脚本。典型能力：
 - 查询结果或漏洞可写入 `/api/vulnerabilities`。
 - 项目信息可写入 `/api/projects/:id/facts`。
 
-完整接口以 `/api-docs` 为准。
+插件应只依赖已确认稳定的 HTTP API，并在自身 README 中记录所需接口与请求字段。
 
 ## MCP 插件
 
@@ -145,7 +145,6 @@ MCP 工具设计建议：
 
 插件应避免依赖未公开的前端内部实现。优先依赖：
 
-- `/api/openapi/spec`
 - 稳定 HTTP API。
 - MCP 协议。
 - 文件目录规范。
@@ -211,6 +210,5 @@ schema 越具体，HITL 越容易判断风险，Agent 也越不容易发散。
   - 认证：`lib/auth-session.js`、`lib/api.js`、`lib/storage.js`
   - 主 UI：`panel/panel.js`
   - 捕获：`devtools.js`、`background/service-worker.js`
-- OpenAPI：`internal/handler/openapi.go`
 - 外部 MCP：`internal/handler/external_mcp.go`
 - Web 端认证参考：`web/static/js/auth.js`

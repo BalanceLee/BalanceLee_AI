@@ -124,9 +124,6 @@
         }
     }
 
-    document.addEventListener('languagechange', function () {
-        applyTheme(readPreference());
-    });
 
     function initTheme() {
         applyTheme(readPreference());

@@ -1939,16 +1939,6 @@ function setupChatFilesDragDrop() {
     });
 }
 
-// 语言切换后重新渲染列表：表头与「更多」菜单由 JS 拼接，无 data-i18n，需用当前语言的 t() 再生成一遍
-document.addEventListener('languagechange', function () {
-    if (typeof window.currentPage !== 'function') return;
-    if (window.currentPage() !== 'chat-files') return;
-    syncAllChatFilesFilterSelects();
-    if (typeof renderChatFilesTable === 'function') {
-        renderChatFilesTable();
-    }
-});
-
 document.addEventListener('DOMContentLoaded', function () {
     initChatFilesFilterSelects();
 });

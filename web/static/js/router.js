@@ -53,6 +53,7 @@ function scheduleChatConversationFromHash(delayMs) {
     const params = new URLSearchParams(hashParts.slice(1).join('?'));
     const conversationId = params.get('conversation');
     const projectId = params.get('project');
+    const requestedView = params.get('view');
     if (projectId && typeof setActiveProjectId === 'function') {
         setActiveProjectId(projectId);
         if (typeof refreshChatProjectSelector === 'function') {
@@ -69,21 +70,31 @@ function scheduleChatConversationFromHash(delayMs) {
         if (token !== chatConversationFromHashSeq) {
             return;
         }
+        let loadResult = null;
         if (typeof loadConversation === 'function') {
-            loadConversation(conversationId);
+            loadResult = loadConversation(conversationId, { fromHashRestore: true });
         } else if (typeof window.loadConversation === 'function') {
-            window.loadConversation(conversationId);
+            loadResult = window.loadConversation(conversationId, { fromHashRestore: true });
         } else {
             console.warn('loadConversation function not found');
+            return;
+        }
+        if (requestedView === 'attack-chain') {
+            Promise.resolve(loadResult).then(function () {
+                if (token === chatConversationFromHashSeq && typeof window.openLiveAttackGraph === 'function') {
+                    window.openLiveAttackGraph(conversationId, { updateHash: false });
+                }
+            });
         }
     }, delayMs);
 }
 
 /** 跳转到指定对话：单次切页 + 单次加载，避免 hashchange 与手动 load 重复触发导致闪烁 */
-function navigateToConversation(conversationId) {
+function navigateToConversation(conversationId, options) {
     const cid = String(conversationId || '').trim();
     if (!cid) return;
-    const targetHash = 'chat?conversation=' + encodeURIComponent(cid);
+    const view = options && options.view === 'attack-chain' ? '&view=attack-chain' : '';
+    const targetHash = 'chat?conversation=' + encodeURIComponent(cid) + view;
     const alreadyOnChat = currentPage === 'chat';
 
     if (window.location.hash.slice(1) !== targetHash) {
@@ -94,10 +105,18 @@ function navigateToConversation(conversationId) {
         switchPage('chat');
     }
 
+    let loadResult = null;
     if (typeof loadConversation === 'function') {
-        void loadConversation(cid);
+        loadResult = loadConversation(cid);
     } else if (typeof window.loadConversation === 'function') {
-        void window.loadConversation(cid);
+        loadResult = window.loadConversation(cid);
+    }
+    if (view) {
+        Promise.resolve(loadResult).then(function () {
+            if (typeof window.openLiveAttackGraph === 'function') {
+                window.openLiveAttackGraph(cid, { updateHash: false });
+            }
+        });
     }
 }
 window.navigateToConversation = navigateToConversation;

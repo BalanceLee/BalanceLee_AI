@@ -7,7 +7,6 @@
 - [部署与启动](zh-CN/deployment.md)
 - [配置说明](zh-CN/configuration.md)
 - [故障排查](zh-CN/troubleshooting.md)
-- [API 参考](zh-CN/api-reference.md)
 
 ## Agent 与工具
 

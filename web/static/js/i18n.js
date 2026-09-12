@@ -46,7 +46,6 @@
         const response = await fetch('/static/i18n/zh-CN.json', { cache: 'no-cache' });
         if (!response.ok) throw new Error('failed to load Chinese translations');
         translations = await response.json();
-        window.__locale = LANGUAGE;
         window.t = translate;
         window.applyTranslations = applyTranslations;
         applyTranslations(document);
@@ -56,7 +55,6 @@
     document.addEventListener('DOMContentLoaded', function () {
         init().catch(function (error) {
             console.error('Failed to initialize Chinese text:', error);
-            window.__locale = LANGUAGE;
             window.t = function (key) { return String(key || ''); };
             window.applyTranslations = function () {};
             resolveReady();

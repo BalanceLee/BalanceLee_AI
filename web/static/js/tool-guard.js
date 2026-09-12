@@ -724,9 +724,4 @@
     window.openToolGuardTest = openTest;
     window.testToolGuardConfig = testConfig;
     window.invalidateToolGuardTest = invalidateTest;
-    document.addEventListener('languagechange', () => {
-        render();
-        invalidateTest();
-        feedback('');
-    });
-})();
+    })();

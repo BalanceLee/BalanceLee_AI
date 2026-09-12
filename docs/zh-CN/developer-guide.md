@@ -40,8 +40,7 @@ go run ./cmd/server --config config.yaml
 1. 在 `internal/handler/` 增加 Handler。
 2. 在 `internal/database/` 增加必要的数据访问。
 3. 在 `internal/app/app.go` 构造并注册路由。
-4. 如需对外文档，更新 `internal/handler/openapi.go`。
-5. 如需前端调用，更新 `web/static/js/`。
+4. 如需前端调用，更新 `web/static/js/`。
 
 ## 数据库
 
@@ -94,22 +93,9 @@ Skill 放在 `skills/<name>/SKILL.md`。用于提供专题能力、流程说明�
 前端代码按功能拆分在 `web/static/js/`。新增页面或模块时：
 
 - 复用现有 `apiFetch`、modal、通知、i18n 工具。
-- 同步更新 `web/static/i18n/zh-CN.json` 和 `en-US.json`。
+- 动态文案统一维护在 `web/static/i18n/zh-CN.json`。
 - 避免把敏感 Key 放到前端。
 - 高风险按钮要有确认和清晰状态反馈。
-
-## OpenAPI
-
-`internal/handler/openapi.go` 维护内置 OpenAPI 输出。新增公开接口后建议同步补：
-
-- path
-- method
-- summary/description
-- requestBody
-- responses
-- security
-
-这样 `/api-docs` 才能反映最新接口。
 
 ## 开发习惯
 
@@ -128,10 +114,9 @@ Skill 放在 `skills/<name>/SKILL.md`。用于提供专题能力、流程说明�
 4. Monitor：如果会执行长任务，是否要记录执行状态。
 5. MCP：是否要暴露给 Agent。
 6. HITL：MCP 工具是否有审批边界。
-7. OpenAPI：是否更新 `/api/openapi/spec`。
-8. Frontend：是否需要 i18n、状态、空态、错误提示。
-9. Tests：数据库、handler、边界条件。
-10. Docs：配置、使用、排错和安全影响。
+7. Frontend：是否需要 i18n、状态、空态、错误提示。
+8. Tests：数据库、handler、边界条件。
+9. Docs：配置、使用、排错和安全影响。
 
 少做其中一项，后面通常会以“用户看不懂”“Agent 调错”“接口没人会用”的形式返工。
 

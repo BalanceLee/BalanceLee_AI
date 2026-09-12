@@ -11,7 +11,6 @@ const styles = fs.readFileSync('web/static/css/style.css', 'utf8');
 const template = fs.readFileSync('web/templates/index.html', 'utf8');
 const handler = fs.readFileSync('internal/handler/hitl.go', 'utf8');
 const zh = JSON.parse(fs.readFileSync('web/static/i18n/zh-CN.json', 'utf8'));
-const en = JSON.parse(fs.readFileSync('web/static/i18n/en-US.json', 'utf8'));
 
 test('输入区提供独立审批入口并暴露可配置等待时限', () => {
     assert.match(template, /id="chat-hitl-approval-dock"/);
@@ -33,7 +32,6 @@ test('超长人工审批内容在限高区域内滚动且操作按钮始终可�
     assert.match(monitor, /wrapChatHitlApprovalScrollRegion\(dock\);/);
     assert.match(monitor, /url\.length > 160[\s\S]*?requestVisitLongUrl/);
     assert.equal(zh.hitl.requestVisitLongUrl, '允许 BalanceLeeAI 访问此地址？');
-    assert.equal(en.hitl.requestVisitLongUrl, 'Allow BalanceLeeAI to visit this address?');
 });
 
 test('刷新恢复会话时先完成权威审批配置同步再允许发送', () => {
@@ -41,7 +39,7 @@ test('刷新恢复会话时先完成权威审批配置同步再允许发送', ()
     assert.match(chat, /await waitForHitlConfigReady\(hitlConversationAtSendStart\)/);
     assert.match(chat, /hitlConfigSyncConversationId = conversationId;[\s\S]{0,240}await hitlConfigSyncPromise;/);
     assert.match(chat, /await hitlConfigSyncPromise;[\s\S]{0,220}seq !== loadConversationRequestSeq/);
-    assert.match(fs.readFileSync('web/static/js/hitl.js', 'utf8'), /window\.csaiHitlDefaultReviewerReady = initHitlDefaultReviewerFromServer\(\)/);
+    assert.match(fs.readFileSync('web/static/js/hitl.js', 'utf8'), /window\.csaiHitlDefaultConfigReady = initHitlDefaultReviewerFromServer\(\)[\s\S]*?window\.csaiHitlDefaultReviewerReady = window\.csaiHitlDefaultConfigReady/);
 });
 
 test('同一会话的审批配置写入串行化以防止旧请求后到覆盖新选择', () => {
@@ -80,9 +78,7 @@ test('输入框可按会话通道获取模型并双向同步会话推理且审�
     assert.match(chat, /function selectChatSystemModel\(model\)[\s\S]{0,2600}method: 'PUT'[\s\S]{0,900}apiFetch\('\/api\/config\/apply'/);
     assert.match(chat, /body: JSON\.stringify\(\{ ai: state\.ai \}\)/);
     assert.equal(zh.chat.modelSettingsAria, '选择 AI 通道、模型与推理设置');
-    assert.equal(en.chat.modelSettingsAria, 'Choose AI channel, model, and reasoning settings');
     assert.equal(zh.chat.reasoningSessionUpdated, '会话推理设置已更新');
-    assert.equal(en.chat.reasoningSessionUpdated, 'Session reasoning updated');
 });
 
 test('审批请求按浏览器、命令、文件和通用工具动态描述', () => {
@@ -187,7 +183,6 @@ test('项目文件夹汇总始终为绿色且只有具体对话按剩余时间�
     assert.match(projects, /project-task-status--approval-summary/);
     assert.equal(zh.hitl.waitingApprovalCount, '等待批准 {{count}}');
     assert.equal(zh.hitl.approvalUrgencyMoreThanThree, '最早审批将在 3 分钟后到期');
-    assert.equal(typeof en.hitl.waitingApprovalCount, 'string');
     const urgencyFunctionSource = projects.match(
         /function projectApprovalUrgencyLevel\(remainingMilliseconds, hasDeadline\) \{[\s\S]*?\n\}/
     );
@@ -243,7 +238,6 @@ test('无项目使用独立虚拟文件夹且顶部新任务继承当前项目',
     assert.match(chat, /String\(inheritedProjectId \|\| ''\)\.trim\(\)/);
     assert.match(chat, /typeof setActiveProjectId === 'function'\) setActiveProjectId\(requestedProjectId\)/);
     assert.equal(zh.chat.newUnassignedConversation, '新建无项目对话');
-    assert.equal(typeof en.chat.newUnassignedConversation, 'string');
 });
 
 test('单个对话的审批徽标随倒计时同步切换紧急颜色', () => {
@@ -331,8 +325,6 @@ test('任务结束后对话内审批按钮会变灰并禁止继续操作', () =>
     assert.match(fs.readFileSync('web/static/css/style.css', 'utf8'), /hitl-approval-task-closed/);
     assert.equal(zh.hitl.taskClosedApprovalUnavailable, '任务已结束，审批不可用');
     assert.equal(zh.hitl.interruptedApprovalCancelled, '任务已中断，审批已取消');
-    assert.equal(typeof en.hitl.taskClosedApprovalUnavailable, 'string');
-    assert.equal(typeof en.hitl.interruptedApprovalCancelled, 'string');
 });
 
 test('项目树只保留当前进程仍在运行任务的审批状态', () => {
@@ -361,7 +353,7 @@ test('旧会话首次升级到五分钟默认审批时限，仍允许用户之�
     assert.match(fs.readFileSync('web/static/js/hitl.js', 'utf8'), /markLegacyHitlTimeoutMigrated/);
 });
 
-test('审批体验文案具有完整中英文资源', () => {
+test('审批体验文案具有完整中文资源', () => {
     const hitlKeys = [
         'waitingApprovalShort',
         'requestVisitUrl',
@@ -378,10 +370,8 @@ test('审批体验文案具有完整中英文资源', () => {
     ];
     hitlKeys.forEach((key) => {
         assert.equal(typeof zh.hitl[key], 'string');
-        assert.equal(typeof en.hitl[key], 'string');
     });
     chatKeys.forEach((key) => {
         assert.equal(typeof zh.chat[key], 'string');
-        assert.equal(typeof en.chat[key], 'string');
     });
 });

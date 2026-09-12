@@ -1889,12 +1889,6 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshRoleModalSelects();
 });
 
-// 语言切换后刷新角色选择器与「选择角色」列表文案
-document.addEventListener('languagechange', () => {
-    updateRoleSelectorDisplay();
-    renderRoleSelectionSidebar();
-    syncAllRoleModalSelects();
-});
 
 // 获取当前选中的角色（供chat.js使用）
 function getCurrentRole() {

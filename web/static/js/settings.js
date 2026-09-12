@@ -3253,12 +3253,7 @@ if (typeof window !== 'undefined') {
 
 if (typeof document !== 'undefined' && !document.__aiChannelI18nBound) {
     document.__aiChannelI18nBound = true;
-    document.addEventListener('languagechange', function () {
-        if (!currentConfig?.ai) return;
-        renderAIChannelSelect();
-        updateAIChannelEditorChrome(selectedAIChannelId || currentConfig.ai.default_channel);
-    });
-}
+    }
 
 function initModelListControls() {
     bindAIChannelEditorPreviewSync();
@@ -4708,28 +4703,6 @@ openSettings = async function() {
     await originalOpenSettings();
     await loadExternalMCPs();
 };
-
-// 语言切换后重新渲染 MCP 管理页中由 JS 写入的区块（innerHTML 不会随 data-i18n 自动更新）
-document.addEventListener('languagechange', function () {
-    try {
-        const settingsPage = document.getElementById('page-settings');
-        if (settingsPage) {
-            initSettingsCustomSelects(settingsPage);
-            refreshSettingsCustomSelects();
-        }
-        const mcpPage = document.getElementById('page-mcp-management');
-        if (mcpPage && mcpPage.classList.contains('active')) {
-            if (typeof loadExternalMCPs === 'function') {
-                loadExternalMCPs({ forceRender: true }).catch(function () { /* ignore */ });
-            }
-            if (typeof updateToolsStats === 'function') {
-                updateToolsStats().catch(function () { /* ignore */ });
-            }
-        }
-    } catch (e) {
-        console.warn('languagechange MCP refresh failed', e);
-    }
-});
 
 window.initSettingsCustomSelects = initSettingsCustomSelects;
 window.refreshSettingsCustomSelects = refreshSettingsCustomSelects;

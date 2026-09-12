@@ -23,7 +23,6 @@
 | 流式兼容 | Eino 单/多代理与 Web UI 共用 `handleStreamEvent`：`conversation`、`progress`、`response_start` / `response_delta`、`thinking` / `thinking_stream_*`、`tool_*`、`response`、`done` 等。 |
 | 批量任务 | 队列 `agentMode` 为 `deep` / `plan_execute` / `supervisor` 时子任务带对应 `orchestration` 调用 `RunDeepAgent`；旧值 `multi` 与「`agentMode` 为空且 `batch_use_multi_agent: true`」均按 `deep`。 |
 | 配置 API | `GET /api/config` 返回 `multi_agent` 标量与 Eino middleware 可运营字段（含用户输入预算、`model_retry_*`、`model_failover_*`、常驻工具白名单）；`PUT /api/config` 可更新这些字段且不覆盖 `sub_agents`。 |
-| OpenAPI | 多代理路径说明已更新（流式未启用为 SSE 错误事件）。 |
 | 机器人 | `ProcessMessageForRobot` 按 `robot_default_agent_mode`（默认 `eino_single`）调用 `RunEinoSingleChatModelAgent` 或 `RunDeepAgent`。 |
 | 预置编排 | 聊天 / WebShell：`POST /api/multi-agent*` 请求体 `orchestration`：`deep` \| `plan_execute` \| `supervisor`（缺省 `deep`）。`deep` 使用 task 子代理协作；`plan_execute` 不构建 YAML/Markdown 子代理；`plan_execute_loop_max_iterations` 仍来自配置；`supervisor` 至少需一个子代理，只有一个子代理时会提示其专家路由空间有限。 |
 | Eino 中间件 | `multi_agent.eino_middleware`（可选）：`patchtoolcalls`（默认开）、`toolsearch`（按阈值拆分 MCP 工具列表）、`plantask`（需 `eino_skills`）、`reduction`（大工具输出截断/落盘）、`checkpoint_dir`（Runner 断点）、`model_retry_*` / `model_failover_channels`（单代理、Deep、Supervisor 与 `plan_execute` Executor 均走 Eino 原生 AgenticModel retry/failover）、`deep_output_key` / `task_tool_description_prefix`（Deep 与 supervisor 主代理共享其中模型容错与 OutputKey）。Agentic 路径的 patchtoolcalls / toolsearch / plantask / reduction / filesystem / skill / summarization tail 均使用 Eino v0.9.14 官方 typed middleware。**`plan_execute`**：Executor 使用 Agentic typed agent，经 adapter 保持官方 Plan/UserInput/ExecutedSteps session contract；Planner/Replanner 仅 summarization tail + prompt 预算截断，不跑 MCP 工具链，因当前 Eino 官方 Planner/Replanner 构造仍是经典 ChatModel 接口。 |
@@ -55,7 +54,7 @@
 | 日期 | 说明 |
 |------|------|
 | 2026-03-22 | 首版：Eino DeepAgent + stream + 前端开关 + GOPROXY 脚本。 |
-| 2026-03-22 | 补充：进度文档、`prepareMultiAgentSession` 抽取、WebShell 后端对齐、`POST /api/multi-agent`、OpenAPI `/api/multi-agent*` 条目。 |
+| 2026-03-22 | 补充：进度文档、`prepareMultiAgentSession` 抽取、WebShell 后端对齐、`POST /api/multi-agent` 接口。 |
 | 2026-03-22 | 路由常注册、流式未启用 SSE 错误、`robot_use_multi_agent`、设置页持久化、WebShell/机器人多代理、`bind_role` 子代理 Skills/tools。 |
 | 2026-03-22 | `tool_result.toolCallId`、`ReasoningContent`→思考流、`batch_use_multi_agent` 与批量队列 Eino 执行。 |
 | 2026-03-22 | 流式工具事件：按稳定签名去重，避免每 chunk 刷屏与「未知工具」；最终回复去重相同段落；内置调度显示为 `task`。 |

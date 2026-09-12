@@ -114,24 +114,6 @@ func levelBySeverity(sev string) string {
 	}
 }
 
-func requestWantsEnglish(c *gin.Context) bool {
-	if c == nil {
-		return false
-	}
-	lang := strings.ToLower(strings.TrimSpace(c.Query("lang")))
-	if lang == "" {
-		lang = strings.ToLower(strings.TrimSpace(c.GetHeader("Accept-Language")))
-	}
-	return strings.HasPrefix(lang, "en")
-}
-
-func i18nText(english bool, zh string, en string) string {
-	if english {
-		return en
-	}
-	return zh
-}
-
 func notificationAccessFromContext(c *gin.Context) database.RBACListAccess {
 	session, ok := security.CurrentSession(c)
 	if !ok {
@@ -206,7 +188,7 @@ func appendVulnerabilityNotificationAccessSQL(query string, args []interface{}, 
 	return query, args
 }
 
-func (h *NotificationHandler) loadPendingHITLItems(limit int, english bool, access database.RBACListAccess) ([]NotificationSummaryItem, error) {
+func (h *NotificationHandler) loadPendingHITLItems(limit int, access database.RBACListAccess) ([]NotificationSummaryItem, error) {
 	query := `
 		SELECT
 			id,
@@ -234,15 +216,15 @@ func (h *NotificationHandler) loadPendingHITLItems(limit int, english bool, acce
 		if err := rows.Scan(&id, &conversationID, &toolName, &createdSec); err != nil {
 			continue
 		}
-		desc := i18nText(english, "会话 "+conversationID+" 的审批中断待处理", "Conversation "+conversationID+" has pending HITL approval")
+		desc := "会话 " + conversationID + " 的审批中断待处理"
 		if strings.TrimSpace(toolName) != "" {
-			desc = i18nText(english, "工具 "+toolName+" 等待审批", "Tool "+toolName+" is waiting for approval")
+			desc = "工具 " + toolName + " 等待审批"
 		}
 		items = append(items, NotificationSummaryItem{
 			ID:             "hitl:" + id,
 			Level:          "p0",
 			Type:           "hitl_pending",
-			Title:          i18nText(english, "HITL 待审批", "HITL Pending Approval"),
+			Title:          "HITL 待审批",
 			Desc:           desc,
 			Ts:             unixSecToRFC3339(createdSec),
 			Count:          1,
@@ -255,7 +237,7 @@ func (h *NotificationHandler) loadPendingHITLItems(limit int, english bool, acce
 	return items, nil
 }
 
-func (h *NotificationHandler) loadVulnerabilityItems(sinceMs int64, limit int, english bool, access database.RBACListAccess) ([]NotificationSummaryItem, map[string]int, error) {
+func (h *NotificationHandler) loadVulnerabilityItems(sinceMs int64, limit int, access database.RBACListAccess) ([]NotificationSummaryItem, map[string]int, error) {
 	sinceSec := normalizedSinceSec(sinceMs)
 	query := `
 		SELECT
@@ -309,10 +291,10 @@ func (h *NotificationHandler) loadVulnerabilityItems(sinceMs int64, limit int, e
 		if sevUpper == "" {
 			sevUpper = "INFO"
 		}
-		finalTitle := i18nText(english, "新漏洞（"+sevUpper+"）", "New Vulnerability ("+sevUpper+")")
+		finalTitle := "新漏洞（" + sevUpper + "）"
 		finalDesc := strings.TrimSpace(title)
 		if finalDesc == "" {
-			finalDesc = i18nText(english, "（无标题）", "(Untitled)")
+			finalDesc = "（无标题）"
 		}
 		items = append(items, NotificationSummaryItem{
 			ID:              "vuln:" + id,
@@ -332,7 +314,7 @@ func (h *NotificationHandler) loadVulnerabilityItems(sinceMs int64, limit int, e
 }
 
 // loadC2SessionOnlineEvents 新会话上线（c2_events：session + critical，与 Manager.IngestCheckIn 一致）
-func (h *NotificationHandler) loadC2SessionOnlineEvents(sinceMs int64, limit int, english bool, access database.RBACListAccess) ([]NotificationSummaryItem, int, error) {
+func (h *NotificationHandler) loadC2SessionOnlineEvents(sinceMs int64, limit int, access database.RBACListAccess) ([]NotificationSummaryItem, int, error) {
 	sinceSec := normalizedSinceSec(sinceMs)
 	events, err := h.db.ListC2EventsForAccess(database.ListC2EventsFilter{
 		Category: "session",
@@ -353,13 +335,13 @@ func (h *NotificationHandler) loadC2SessionOnlineEvents(sinceMs int64, limit int
 			desc = desc[:200] + "…"
 		}
 		if desc == "" {
-			desc = i18nText(english, "新会话已建立", "A new session was created")
+			desc = "新会话已建立"
 		}
 		items = append(items, NotificationSummaryItem{
 			ID:         "c2evt:" + e.ID,
 			Level:      "p0",
 			Type:       "c2_session_online",
-			Title:      i18nText(english, "C2 新会话上线", "C2 new session online"),
+			Title:      "C2 新会话上线",
 			Desc:       desc,
 			Ts:         e.CreatedAt.UTC().Format(time.RFC3339),
 			Count:      1,
@@ -371,52 +353,7 @@ func (h *NotificationHandler) loadC2SessionOnlineEvents(sinceMs int64, limit int
 	return items, len(items), nil
 }
 
-func (h *NotificationHandler) loadFailedExecutionItems(sinceMs int64, limit int, english bool) ([]NotificationSummaryItem, int, error) {
-	sinceSec := normalizedSinceSec(sinceMs)
-	rows, err := h.db.Query(`
-		SELECT
-			id,
-			tool_name,
-			COALESCE(CAST(strftime('%s', start_time) AS INTEGER), 0)
-		FROM tool_executions
-		WHERE status = 'failed'
-		  AND CAST(strftime('%s', start_time) AS INTEGER) > ?
-		ORDER BY start_time DESC
-		LIMIT ?
-	`, sinceSec, limit)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer rows.Close()
-	items := make([]NotificationSummaryItem, 0, limit)
-	count := 0
-	for rows.Next() {
-		var id, toolName string
-		var startSec int64
-		if err := rows.Scan(&id, &toolName, &startSec); err != nil {
-			continue
-		}
-		count++
-		if strings.TrimSpace(toolName) == "" {
-			toolName = i18nText(english, "未知工具", "unknown")
-		}
-		items = append(items, NotificationSummaryItem{
-			ID:          "exec_failed:" + id,
-			Level:       "p0",
-			Type:        "task_failed",
-			Title:       i18nText(english, "任务执行失败", "Task Execution Failed"),
-			Desc:        i18nText(english, "工具 "+toolName+" 执行失败", "Tool "+toolName+" execution failed"),
-			Ts:          unixSecToRFC3339(startSec),
-			Count:       1,
-			Actionable:  false,
-			Read:        false,
-			ExecutionID: id,
-		})
-	}
-	return items, count, nil
-}
-
-func (h *NotificationHandler) summarizeLongRunningTasks(threshold time.Duration, english bool, access database.RBACListAccess) ([]NotificationSummaryItem, int) {
+func (h *NotificationHandler) summarizeLongRunningTasks(threshold time.Duration, access database.RBACListAccess) ([]NotificationSummaryItem, int) {
 	if h.agentHandler == nil || h.agentHandler.tasks == nil {
 		return nil, 0
 	}
@@ -435,8 +372,8 @@ func (h *NotificationHandler) summarizeLongRunningTasks(threshold time.Duration,
 				ID:             "task_long:" + t.ConversationID,
 				Level:          "p1",
 				Type:           "long_running_tasks",
-				Title:          i18nText(english, "长时间运行任务", "Long Running Task"),
-				Desc:           i18nText(english, "会话 "+t.ConversationID+" 运行超过 15 分钟", "Conversation "+t.ConversationID+" has been running over 15 minutes"),
+				Title:          "长时间运行任务",
+				Desc:           "会话 " + t.ConversationID + " 运行超过 15 分钟",
 				Ts:             t.StartedAt.UTC().Format(time.RFC3339),
 				Count:          1,
 				Actionable:     true,
@@ -448,7 +385,7 @@ func (h *NotificationHandler) summarizeLongRunningTasks(threshold time.Duration,
 	return items, len(items)
 }
 
-func (h *NotificationHandler) summarizeCompletedTasksSince(sinceMs int64, limit int, english bool, access database.RBACListAccess) ([]NotificationSummaryItem, int) {
+func (h *NotificationHandler) summarizeCompletedTasksSince(sinceMs int64, limit int, access database.RBACListAccess) ([]NotificationSummaryItem, int) {
 	if h.agentHandler == nil || h.agentHandler.tasks == nil {
 		return nil, 0
 	}
@@ -467,8 +404,8 @@ func (h *NotificationHandler) summarizeCompletedTasksSince(sinceMs int64, limit 
 				ID:             "task_completed:" + t.ConversationID + ":" + strconv.FormatInt(t.CompletedAt.Unix(), 10),
 				Level:          "p2",
 				Type:           "task_completed",
-				Title:          i18nText(english, "任务完成", "Task Completed"),
-				Desc:           i18nText(english, "会话 "+t.ConversationID+" 已完成", "Conversation "+t.ConversationID+" completed"),
+				Title:          "任务完成",
+				Desc:           "会话 " + t.ConversationID + " 已完成",
 				Ts:             t.CompletedAt.UTC().Format(time.RFC3339),
 				Count:          1,
 				Actionable:     false,
@@ -719,7 +656,6 @@ func (h *NotificationHandler) GetSummary(c *gin.Context) {
 		return
 	}
 
-	english := requestWantsEnglish(c)
 	sinceMs := normalizeSinceMs(parseSinceMs(c.Query("since")))
 	limit, _ := strconv.Atoi(strings.TrimSpace(c.DefaultQuery("limit", "50")))
 	if limit <= 0 {
@@ -733,7 +669,7 @@ func (h *NotificationHandler) GetSummary(c *gin.Context) {
 	hitlItems := []NotificationSummaryItem{}
 	if security.SessionHasPermission(c, "hitl:read") {
 		var err error
-		hitlItems, err = h.loadPendingHITLItems(limit, english, access)
+		hitlItems, err = h.loadPendingHITLItems(limit, access)
 		if err != nil {
 			h.logger.Warn("加载 HITL 通知失败", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to summarize hitl notifications"})
@@ -751,7 +687,7 @@ func (h *NotificationHandler) GetSummary(c *gin.Context) {
 	}
 	if security.SessionHasPermission(c, "vulnerability:read") {
 		var err error
-		vulnItems, vulnCounts, err = h.loadVulnerabilityItems(sinceMs, limit, english, access)
+		vulnItems, vulnCounts, err = h.loadVulnerabilityItems(sinceMs, limit, access)
 		if err != nil {
 			h.logger.Warn("加载漏洞通知失败", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to summarize vulnerabilities"})
@@ -763,7 +699,7 @@ func (h *NotificationHandler) GetSummary(c *gin.Context) {
 	c2OnlineCount := 0
 	if security.SessionHasPermission(c, "c2:read") {
 		var err error
-		c2OnlineItems, c2OnlineCount, err = h.loadC2SessionOnlineEvents(sinceMs, limit, english, access)
+		c2OnlineItems, c2OnlineCount, err = h.loadC2SessionOnlineEvents(sinceMs, limit, access)
 		if err != nil {
 			h.logger.Warn("加载 C2 会话上线通知失败", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to summarize c2 session events"})
@@ -776,8 +712,8 @@ func (h *NotificationHandler) GetSummary(c *gin.Context) {
 	longRunningCount := 0
 	completedCount := 0
 	if security.SessionHasPermission(c, "tasks:read") || security.SessionHasPermission(c, "chat:read") {
-		longRunningItems, longRunningCount = h.summarizeLongRunningTasks(15*time.Minute, english, access)
-		completedItems, completedCount = h.summarizeCompletedTasksSince(sinceMs, limit, english, access)
+		longRunningItems, longRunningCount = h.summarizeLongRunningTasks(15*time.Minute, access)
+		completedItems, completedCount = h.summarizeCompletedTasksSince(sinceMs, limit, access)
 	}
 
 	items := make([]NotificationSummaryItem, 0, len(hitlItems)+len(vulnItems)+len(c2OnlineItems)+len(longRunningItems)+len(completedItems))

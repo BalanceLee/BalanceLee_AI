@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const source = fs.readFileSync('web/static/js/tool-guard.js', 'utf8');
-const translations = JSON.parse(fs.readFileSync('web/static/i18n/en-US.json', 'utf8')).toolGuard;
+const translations = JSON.parse(fs.readFileSync('web/static/i18n/zh-CN.json', 'utf8')).toolGuard;
 
 function harness(permissions = ['config:read', 'config:write']) {
     const nodes = new Map();
@@ -196,7 +196,7 @@ test('test rejects non-object arguments before making an API request', async () 
     for (const input of ['[]', 'null', '"https://example.gov"', '{']) {
         h.element('test-arguments').value = input;
         await h.window.testToolGuardConfig();
-        assert.match(h.element('feedback').textContent, /valid JSON object/);
+        assert.match(h.element('feedback').textContent, /有效的 JSON 对象/);
     }
     assert.equal(h.calls.length, 1);
 });
@@ -222,7 +222,7 @@ test('UTF-8 byte limits are enforced before saving multi-byte rule names', async
     h.element('rule-0-name').listeners.input();
     await h.window.saveToolGuardConfig();
     assert.equal(h.calls.length, 1);
-    assert.match(h.element('feedback').textContent, /200 UTF-8 bytes/);
+    assert.match(h.element('feedback').textContent, /200 个 UTF-8 字节/);
 });
 
 test('malformed dry-run responses report an error instead of claiming the call is allowed', async () => {
@@ -232,7 +232,7 @@ test('malformed dry-run responses report an error instead of claiming the call i
     h.reply({});
     await h.window.testToolGuardConfig();
     assert.equal(h.element('test-result').hidden, true);
-    assert.match(h.element('feedback').textContent, /invalid test result/);
+    assert.match(h.element('feedback').textContent, /测试结果格式不正确/);
 });
 
 test('saved rules start collapsed behind native accessible buttons without making the configuration dirty', async () => {
@@ -383,7 +383,7 @@ test('deleting rules maintains the remaining row identity and gives focus to the
     h.element('rule-0-summary').listeners.click();
     h.element('rule-0-delete').listeners.click();
     assert.equal(h.document.activeElement, h.element('add'));
-    assert.match(h.text(h.element('rules')), /No rules/);
+    assert.match(h.text(h.element('rules')), /暂无规则/);
 });
 
 test('compact status and enabled counts track draft toggles independently of accordion expansion', async () => {
@@ -675,7 +675,7 @@ test('new-rule required-field and byte-limit errors are shown locally before any
     assert.equal(h.element('rule-draft-name').getAttribute('aria-invalid'), 'true');
     fillDraft(h, { name: '政'.repeat(67) });
     await h.window.commitToolGuardRule();
-    assert.match(h.element('add-feedback').textContent, /200 UTF-8 bytes/);
+    assert.match(h.element('add-feedback').textContent, /200 个 UTF-8 字节/);
     assert.equal(h.calls.length, 1);
     assert.equal(h.element('rule-1-summary'), undefined);
     assert.equal(h.element('save').disabled, true);
@@ -737,14 +737,14 @@ test('local test errors and unsafe result text stay inside their validation pane
     for (const input of ['[]', 'null', '"target"', '{']) {
         fillField(h, 'draft-test-arguments', input);
         await runLocal(h, 'draft');
-        assert.match(h.element('draft-test-feedback').textContent, /valid JSON object/);
+        assert.match(h.element('draft-test-feedback').textContent, /有效的 JSON 对象/);
         assert.equal(h.element('feedback').hidden, true);
     }
     assert.equal(h.calls.length, 1);
     fillField(h, 'draft-test-arguments', '{}');
     h.reply({});
     await runLocal(h, 'draft');
-    assert.match(h.element('draft-test-feedback').textContent, /invalid test result/);
+    assert.match(h.element('draft-test-feedback').textContent, /测试结果格式不正确/);
     assert.equal(h.element('draft-test-result').hidden, true);
     const unsafe = '<img src=x onerror=alert(1)>';
     h.reply({ blocked: true, match: { ruleName: unsafe, matchedText: unsafe, message: unsafe } });

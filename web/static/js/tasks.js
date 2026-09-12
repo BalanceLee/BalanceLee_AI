@@ -2891,30 +2891,6 @@ window.startInlineEditSchedule = startInlineEditSchedule;
 window.toggleInlineScheduleCron = toggleInlineScheduleCron;
 window.saveInlineSchedule = saveInlineSchedule;
 
-// 语言切换后，列表/分页/详情弹窗由 JS 渲染的文案需用当前语言重绘（applyTranslations 不会处理 innerHTML 内容）
-document.addEventListener('languagechange', function () {
-    try {
-        syncAllBatchQueuesFilterSelects();
-        syncAllBatchImportFormSelects();
-        const tasksPage = document.getElementById('page-tasks');
-        if (!tasksPage || !tasksPage.classList.contains('active')) {
-            return;
-        }
-        if (document.getElementById('batch-queues-list')) {
-            renderBatchQueues();
-        }
-        const detailModal = document.getElementById('batch-queue-detail-modal');
-        if (
-            detailModal &&
-            isAppModalOpen('batch-queue-detail-modal') &&
-            batchQueuesState.currentQueueId
-        ) {
-            showBatchQueueDetail(batchQueuesState.currentQueueId);
-        }
-    } catch (e) {
-        console.warn('languagechange tasks refresh failed', e);
-    }
-});
 
 document.addEventListener('DOMContentLoaded', function () {
     initBatchQueuesFilterSelects();

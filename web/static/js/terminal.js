@@ -462,7 +462,6 @@
     }
 
     function refreshTerminalI18n() {
-        // 语言切换后更新标签与容器 title；已打开的终端内容不强制清屏，以免丢失会话输出
         try {
             var tabsEl = document.querySelector('.terminal-tabs');
             if (tabsEl) {
@@ -483,9 +482,6 @@
         } catch (e) { /* ignore */ }
     }
 
-    document.addEventListener('languagechange', function () {
-        refreshTerminalI18n();
-    });
 
     function initTerminal() {
         var pane1 = document.getElementById('terminal-pane-1');

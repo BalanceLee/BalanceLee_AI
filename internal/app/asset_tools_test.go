@@ -20,10 +20,10 @@ func TestAssetToolsCRUDQueryAndPageLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	user, err := db.CreateRBACUser("asset-agent", "Asset Agent", "hash", true, nil)
-	if err != nil {
+	if err := db.BootstrapAdmin("hash"); err != nil {
 		t.Fatal(err)
 	}
+	user := &database.RBACUser{ID: "admin", Username: "admin"}
 	principal := authctx.NewPrincipal(user.ID, user.Username, database.RBACScopeAssigned, map[string]bool{
 		"asset:read": true, "asset:write": true, "asset:delete": true,
 	})

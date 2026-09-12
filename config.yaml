@@ -67,7 +67,7 @@ ai:
     qwen-max:
       name: Qwen Max
       provider: openai_compatible
-      api_key: 
+      api_key: sk-xxxxxxx
       base_url: https://api.deepseek.com
       model: deepseek-flash
       max_total_tokens: 120000

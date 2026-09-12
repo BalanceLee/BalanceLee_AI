@@ -6,7 +6,6 @@ const monitor = fs.readFileSync('web/static/js/monitor.js', 'utf8');
 const webshell = fs.readFileSync('web/static/js/webshell.js', 'utf8');
 const styles = fs.readFileSync('web/static/css/style.css', 'utf8');
 const zh = JSON.parse(fs.readFileSync('web/static/i18n/zh-CN.json', 'utf8'));
-const en = JSON.parse(fs.readFileSync('web/static/i18n/en-US.json', 'utf8'));
 
 test('Eino token usage summary is rendered as a first-class timeline event', () => {
     assert.match(monitor, /case 'eino_usage_summary'/);
@@ -27,13 +26,7 @@ test('Eino token usage summary is visible in WebShell live and restored timeline
     assert.match(styles, /html\[data-theme="dark"\] \.webshell-ai-timeline-eino_usage_summary/);
 });
 
-test('Eino token usage summary supports language refresh', () => {
-    assert.match(monitor, /type === 'eino_usage_summary'/);
-    assert.match(monitor, /item\.dataset\.modelCalls/);
-    assert.match(monitor, /setTimelineItemContentStreamPlain\(contentEl, formatEinoUsageSummaryMessage\(usageData\)\)/);
-});
-
-test('Eino resilience and usage timeline labels have zh/en translations', () => {
+test('Eino resilience and usage timeline labels have Chinese translations', () => {
     [
         'einoModelRetryTitle',
         'einoModelFailoverTitle',
@@ -47,7 +40,5 @@ test('Eino resilience and usage timeline labels have zh/en translations', () => 
     ].forEach((key) => {
         assert.equal(typeof zh.chat[key], 'string', `zh chat.${key}`);
         assert.ok(zh.chat[key].length > 0, `zh chat.${key} is empty`);
-        assert.equal(typeof en.chat[key], 'string', `en chat.${key}`);
-        assert.ok(en.chat[key].length > 0, `en chat.${key} is empty`);
     });
 });

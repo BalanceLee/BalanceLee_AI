@@ -4,7 +4,11 @@ let currentConversationId = null;
 function syncChatConversationHash(conversationId) {
     const normalizedConversationId = String(conversationId || '').trim();
     if (!normalizedConversationId || window.location.hash.split('?')[0] !== '#chat') return;
-    const targetHash = '#chat?conversation=' + encodeURIComponent(normalizedConversationId);
+    const currentParams = new URLSearchParams((window.location.hash.split('?')[1] || ''));
+    const preserveAttackGraph = currentParams.get('conversation') === normalizedConversationId &&
+        currentParams.get('view') === 'attack-chain';
+    const targetHash = '#chat?conversation=' + encodeURIComponent(normalizedConversationId) +
+        (preserveAttackGraph ? '&view=attack-chain' : '');
     if (window.location.hash !== targetHash) {
         window.history.replaceState(null, '', targetHash);
     }
@@ -2105,17 +2109,6 @@ async function initChatAgentModeFromConfig() {
     }
 }
 
-document.addEventListener('languagechange', function () {
-    const hid = document.getElementById('agent-mode-select');
-    if (!hid) return;
-    const v = hid.value;
-    if (chatAgentModeIsEinoSingle(v) || chatAgentModeIsEino(v)) {
-        syncAgentModeFromValue(v);
-    }
-    if (typeof updateChatReasoningSummary === 'function') {
-        updateChatReasoningSummary();
-    }
-});
 
 // 保存输入框草稿到localStorage（防抖版本）
 function saveChatDraftDebounced(content) {
@@ -2417,9 +2410,6 @@ async function sendMessage() {
             let buffer = '';
             let streamSawDone = false;
             const dispatchStreamEvent = function (eventData) {
-                if (eventData && eventData.type === 'done') {
-                    streamSawDone = true;
-                }
                 const eventConvId = eventData && eventData.data && eventData.data.conversationId
                     ? String(eventData.data.conversationId)
                     : '';
@@ -2432,6 +2422,9 @@ async function sendMessage() {
                         streamConversationId = eventConvId;
                         liveStreamState.conversationId = eventConvId;
                         justBoundConversation = true;
+                        if (typeof updateProgressConversation === 'function') {
+                            updateProgressConversation(progressId, eventConvId);
+                        }
                     }
                 }
                 // 切换对话后仍可能收到旧响应流中已缓冲的 conversation、response_start
@@ -2440,8 +2433,22 @@ async function sendMessage() {
                     if (eventConvId) updateProgressConversation(progressId, eventConvId);
                     return;
                 }
+                if (
+                    justBoundConversation &&
+                    !requestConversationId &&
+                    !getVisibleChatConversationId() &&
+                    document.getElementById(progressId)
+                ) {
+                    setCurrentConversationIdFromStream(eventConvId);
+                    syncAgentLiveStreamConversationId(eventConvId);
+                    updateActiveConversation();
+                    addAttackChainButton(eventConvId);
+                }
                 if (!justBoundConversation && !isStreamStillVisibleForRequest()) {
                     return;
+                }
+                if (eventData && eventData.type === 'done') {
+                    streamSawDone = true;
                 }
                 handleStreamEvent(eventData, progressElement, progressId,
                     () => assistantMessageId, (id) => { assistantMessageId = id; },
@@ -3488,6 +3495,39 @@ function ensureMessageMetaFooter(content) {
     return footer;
 }
 
+function attackGraphDeepLink(conversationId) {
+    return '#chat?conversation=' + encodeURIComponent(String(conversationId || '').trim()) + '&view=attack-chain';
+}
+
+function appendAttackGraphLink(messageDiv, conversationId) {
+    const cid = String(conversationId || '').trim();
+    if (!messageDiv || !cid || !messageDiv.classList.contains('assistant') || messageDiv.dataset.systemReadyMessage) {
+        return null;
+    }
+    const content = messageDiv.querySelector('.message-content');
+    const footer = ensureMessageMetaFooter(content);
+    if (!footer) return null;
+
+    let link = footer.querySelector('.message-attack-graph-link');
+    if (!link) {
+        link = document.createElement('a');
+        link.className = 'message-attack-graph-link';
+        link.textContent = typeof window.t === 'function' ? window.t('chat.liveAttackGraph') : '查看实时攻击图';
+        link.title = typeof window.t === 'function' ? window.t('chat.liveAttackGraphTitle') : '打开当前对话的实时攻击图';
+        link.addEventListener('click', function(event) {
+            event.preventDefault();
+            if (typeof window.openLiveAttackGraph === 'function') {
+                window.openLiveAttackGraph(link.dataset.conversationId || '');
+            }
+        });
+        const copyBtn = footer.querySelector('.message-copy-btn');
+        footer.insertBefore(link, copyBtn || null);
+    }
+    link.dataset.conversationId = cid;
+    link.href = attackGraphDeepLink(cid);
+    return link;
+}
+
 function appendMessageCopyButton(messageDiv) {
     if (!messageDiv) return null;
     if (!messageDiv.classList || (!messageDiv.classList.contains('assistant') && !messageDiv.classList.contains('user'))) {
@@ -3521,8 +3561,8 @@ function appendMessageCopyButton(messageDiv) {
 }
 window.appendMessageCopyButton = appendMessageCopyButton;
 window.ensureMessageMetaFooter = ensureMessageMetaFooter;
+window.appendAttackGraphLink = appendAttackGraphLink;
 
-// 添加消息（options.systemReadyMessage 为 true 时，语言切换会刷新该条文案）
 function addMessage(role, content, mcpExecutionIds = null, progressId = null, createdAt = null, options = null) {
     const messagesDiv = document.getElementById('chat-messages');
     const messageDiv = document.createElement('div');
@@ -3618,7 +3658,7 @@ function addMessage(role, content, mcpExecutionIds = null, progressId = null, cr
     } else {
         messageTime = new Date();
     }
-    const msgTimeLocale = (typeof window.__locale === 'string' && window.__locale.startsWith('zh')) ? 'zh-CN' : 'en-US';
+    const msgTimeLocale = 'zh-CN';
     const msgTimeOpts = { hour: '2-digit', minute: '2-digit' };
     if (msgTimeLocale === 'zh-CN') msgTimeOpts.hour12 = false;
     timeDiv.textContent = messageTime.toLocaleTimeString(msgTimeLocale, msgTimeOpts);
@@ -3634,6 +3674,9 @@ function addMessage(role, content, mcpExecutionIds = null, progressId = null, cr
     // 为用户和助手消息添加复制按钮（复制整条消息内容）
     if (role === 'assistant' || role === 'user') {
         appendMessageCopyButton(messageDiv);
+    }
+    if (role === 'assistant' && currentConversationId && !(options && options.systemReadyMessage)) {
+        appendAttackGraphLink(messageDiv, currentConversationId);
     }
 
     // 有 MCP 执行记录且非流式占位消息时展示调用按钮；带 progressId 的流式占位不挂此条（与进度卡片一致，结束时 integrate 再创建）
@@ -5567,7 +5610,7 @@ function renderMCPDetailModal(exec) {
     try {
         statusEl.dataset.detailStatus = normalizedStatus;
     } catch (e) { /* ignore */ }
-    const detailTimeLocale = (typeof window.__locale === 'string' && window.__locale.startsWith('zh')) ? 'zh-CN' : 'en-US';
+    const detailTimeLocale = 'zh-CN';
     const detailTimeEl = document.getElementById('detail-time');
     if (detailTimeEl) {
         detailTimeEl.textContent = exec.startTime
@@ -6227,7 +6270,7 @@ function formatConversationTimestamp(dateObj, todayStart, yesterdayStart) {
     const referenceToday = todayStart || new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const referenceYesterday = yesterdayStart || new Date(referenceToday.getTime() - 24 * 60 * 60 * 1000);
     const messageDate = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
-    const fmtLocale = (typeof window.__locale === 'string' && window.__locale.startsWith('zh')) ? 'zh-CN' : 'en-US';
+    const fmtLocale = 'zh-CN';
     const yesterdayLabel = typeof window.t === 'function' ? window.t('chat.yesterday') : '昨天';
 
     const timeOnlyOpts = { hour: '2-digit', minute: '2-digit' };
@@ -6335,7 +6378,8 @@ async function hydrateConversationTokenUsage(conversationId, expectedSeq, signal
     });
 }
 
-async function loadConversation(conversationId) {
+async function loadConversation(conversationId, options) {
+    options = options || {};
     conversationId = String(conversationId || '').trim();
     if (!conversationId) return;
     // Keep the visible conversation addressable across a full page refresh.
@@ -6344,7 +6388,8 @@ async function loadConversation(conversationId) {
     // conversation and reload falls back to the welcome screen instead of
     // reconnecting the running task event stream.
     markChatConversationNavigation(conversationId);
-    if (typeof window.cancelScheduledChatConversationFromHash === 'function') {
+    if (!options.fromHashRestore &&
+        typeof window.cancelScheduledChatConversationFromHash === 'function') {
         window.cancelScheduledChatConversationFromHash();
     }
     syncChatConversationHash(conversationId);
@@ -6846,8 +6891,98 @@ function _acBuildNodeIconDataUrl(iconType, color, colorDark) {
 
 let attackChainCytoscape = null;
 let currentAttackChainConversationId = null;
-// 按对话ID管理加载状态，实现不同对话之间的解耦
 const attackChainLoadingMap = new Map(); // Map<conversationId, boolean>
+const attackChainRefreshPending = new Set();
+let attackChainRefreshTimer = null;
+let attackChainLivePollTimer = null;
+let attackChainLivePollConversationId = '';
+let attackChainSummaryRetryTimer = null;
+let attackChainLiveMode = true;
+let attackChainLiveRevision = '';
+const ATTACK_CHAIN_LIVE_POLL_INTERVAL = 1400;
+
+function updateAttackChainLiveStatus(state) {
+    const status = document.getElementById('attack-chain-live-status');
+    if (!status) return;
+    const key = state === 'syncing'
+        ? 'attackChainModal.syncing'
+        : (state === 'summary' ? 'attackChainModal.aiSummary' : 'attackChainModal.live');
+    status.textContent = typeof window.t === 'function'
+        ? window.t(key)
+        : (state === 'syncing' ? '同步中' : (state === 'summary' ? 'AI 归纳' : '实时'));
+    status.classList.toggle('is-syncing', state === 'syncing');
+    status.classList.toggle('is-summary', state === 'summary');
+}
+
+function scheduleLiveAttackChainRefresh(conversationId) {
+    const cid = String(conversationId || '').trim();
+    if (!attackChainLiveMode || !cid || cid !== currentAttackChainConversationId ||
+        !isAppModalOpen('attack-chain-modal')) {
+        return;
+    }
+    if (attackChainRefreshTimer) clearTimeout(attackChainRefreshTimer);
+    attackChainRefreshTimer = setTimeout(function() {
+        attackChainRefreshTimer = null;
+        loadAttackChain(cid, { silent: true });
+    }, 450);
+}
+window.scheduleLiveAttackChainRefresh = scheduleLiveAttackChainRefresh;
+
+function stopAttackChainLivePolling() {
+    if (attackChainLivePollTimer) {
+        clearInterval(attackChainLivePollTimer);
+        attackChainLivePollTimer = null;
+    }
+    attackChainLivePollConversationId = '';
+}
+
+function startAttackChainLivePolling(conversationId) {
+    const cid = String(conversationId || '').trim();
+    if (!cid || !attackChainLiveMode) {
+        stopAttackChainLivePolling();
+        return;
+    }
+    if (attackChainLivePollTimer && attackChainLivePollConversationId === cid) return;
+    stopAttackChainLivePolling();
+    attackChainLivePollConversationId = cid;
+    attackChainLivePollTimer = setInterval(function () {
+        if (!attackChainLiveMode || cid !== currentAttackChainConversationId ||
+            !isAppModalOpen('attack-chain-modal')) {
+            stopAttackChainLivePolling();
+            return;
+        }
+        loadAttackChain(cid, { silent: true, reconcile: true });
+    }, ATTACK_CHAIN_LIVE_POLL_INTERVAL);
+}
+
+function clearAttackChainSummaryRetry() {
+    if (attackChainSummaryRetryTimer) {
+        clearTimeout(attackChainSummaryRetryTimer);
+        attackChainSummaryRetryTimer = null;
+    }
+}
+
+function clearAttackChainRefreshTimers() {
+    if (attackChainRefreshTimer) {
+        clearTimeout(attackChainRefreshTimer);
+        attackChainRefreshTimer = null;
+    }
+    stopAttackChainLivePolling();
+    clearAttackChainSummaryRetry();
+}
+
+function scheduleAttackChainSummaryRetry(conversationId) {
+    const cid = String(conversationId || '').trim();
+    if (!cid) return;
+    if (attackChainSummaryRetryTimer) clearTimeout(attackChainSummaryRetryTimer);
+    attackChainSummaryRetryTimer = setTimeout(function() {
+        attackChainSummaryRetryTimer = null;
+        if (!attackChainLiveMode && cid === currentAttackChainConversationId &&
+            isAppModalOpen('attack-chain-modal')) {
+            loadAttackChain(cid, { silent: true });
+        }
+    }, 5000);
+}
 
 // 检查指定对话是否正在加载
 function isAttackChainLoading(conversationId) {
@@ -6878,7 +7013,12 @@ function updateAttackChainAvailability() {
 }
 
 // 显示攻击链模态框
-async function showAttackChain(conversationId) {
+async function showAttackChain(conversationId, options) {
+    options = options || {};
+    clearAttackChainRefreshTimers();
+    attackChainLiveMode = options.live !== false;
+    attackChainLiveRevision = '';
+    updateAttackChainLiveStatus(attackChainLiveMode ? 'syncing' : 'summary');
     // 如果当前显示的对话ID不同，或者没有在加载，允许打开
     // 如果正在加载同一个对话，也允许打开（显示加载状态）
     if (isAttackChainLoading(conversationId) && currentAttackChainConversationId === conversationId) {
@@ -6899,6 +7039,7 @@ async function showAttackChain(conversationId) {
 
     openAppModal('attack-chain-modal', { focus: false });
     updateAttackChainStats({ nodes: [], edges: [] });
+    updateAttackChainCriticalControls({ critical_node_ids: [] });
 
     // 清空容器
     const container = document.getElementById('attack-chain-container');
@@ -6925,20 +7066,28 @@ async function showAttackChain(conversationId) {
 }
 
 // 加载攻击链数据
-async function loadAttackChain(conversationId) {
+async function loadAttackChain(conversationId, options) {
+    options = options || {};
     if (isAttackChainLoading(conversationId)) {
+        if (attackChainLiveMode) attackChainRefreshPending.add(conversationId);
         return; // 防止重复调用
     }
 
     setAttackChainLoading(conversationId, true);
+    if (attackChainLiveMode && !options.silent) updateAttackChainLiveStatus('syncing');
 
     try {
-        const response = await apiFetch(`/api/attack-chain/${conversationId}`);
+        const endpoint = attackChainLiveMode
+            ? `/api/attack-chain/${encodeURIComponent(conversationId)}/live`
+            : `/api/attack-chain/${encodeURIComponent(conversationId)}`;
+        const response = await apiFetch(endpoint, attackChainLiveMode ? {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache' }
+        } : undefined);
 
         if (!response.ok) {
             // 处理 409 Conflict（正在生成中）
             if (response.status === 409) {
-                const error = await response.json();
                 const container = document.getElementById('attack-chain-container');
                 if (container) {
                     container.innerHTML = `
@@ -6953,18 +7102,13 @@ async function loadAttackChain(conversationId) {
                         </div>
                     `;
                 }
-                // 5秒后自动刷新（允许刷新，但保持加载状态防止重复点击）
-                // 使用闭包保存 conversationId，防止串台
-                setTimeout(() => {
-                    // 检查当前显示的对话ID是否匹配
-                    if (currentAttackChainConversationId === conversationId) {
-                        refreshAttackChain();
-                    }
-                }, 5000);
-                // 在 409 情况下，保持加载状态，防止重复点击
-                // 但允许 refreshAttackChain 调用 loadAttackChain 来检查状态
-                // 注意：不重置加载状态，保持加载状态
-                // 恢复按钮状态（虽然保持加载状态，但允许用户手动刷新）
+                setAttackChainLoading(conversationId, false);
+                if (attackChainLiveMode) {
+                    updateAttackChainLiveStatus('live');
+                } else {
+                    scheduleAttackChainSummaryRetry(conversationId);
+                }
+                // 恢复按钮状态，用户可在自动重试前手动刷新
                 const regenerateBtn = document.querySelector('button[onclick="regenerateAttackChain()"]');
                 if (regenerateBtn) {
                     regenerateBtn.disabled = false;
@@ -6990,11 +7134,20 @@ async function loadAttackChain(conversationId) {
             return;
         }
 
-        // 渲染攻击链
-        renderAttackChain(chainData);
+        const revision = String(chainData.revision || '');
+        if (!options.silent || !revision || revision !== attackChainLiveRevision) {
+            renderAttackChain(chainData);
+            attackChainLiveRevision = revision;
+        }
 
         // 更新统计信息
         updateAttackChainStats(chainData);
+        updateAttackChainLiveStatus(attackChainLiveMode ? 'live' : 'summary');
+        if (attackChainLiveMode && chainData.running !== false) {
+            startAttackChainLivePolling(conversationId);
+        } else {
+            stopAttackChainLivePolling();
+        }
 
         // 成功加载后，重置加载状态
         setAttackChainLoading(conversationId, false);
@@ -7007,6 +7160,8 @@ async function loadAttackChain(conversationId) {
         }
         // 错误时也重置加载状态
         setAttackChainLoading(conversationId, false);
+        updateAttackChainLiveStatus(attackChainLiveMode ? 'live' : 'summary');
+        if (attackChainLiveMode) startAttackChainLivePolling(conversationId);
     } finally {
         // 恢复重新生成按钮
         const regenerateBtn = document.querySelector('button[onclick="regenerateAttackChain()"]');
@@ -7015,14 +7170,99 @@ async function loadAttackChain(conversationId) {
             regenerateBtn.style.opacity = '1';
             regenerateBtn.style.cursor = 'pointer';
         }
+        if (attackChainRefreshPending.delete(conversationId) && attackChainLiveMode) {
+            scheduleLiveAttackChainRefresh(conversationId);
+        }
     }
 }
+
+function updateAttackChainCriticalControls(chainData) {
+    const criticalNodeIDs = Array.isArray(chainData && chainData.critical_node_ids)
+        ? chainData.critical_node_ids
+        : [];
+    const hasCriticalPath = criticalNodeIDs.length > 0;
+    const status = document.getElementById('attack-chain-critical-status');
+    const toggleWrap = document.getElementById('attack-chain-critical-toggle-wrap');
+    const toggle = document.getElementById('attack-chain-critical-toggle');
+    if (status) status.hidden = !hasCriticalPath;
+    if (toggleWrap) toggleWrap.hidden = !hasCriticalPath;
+    if (!hasCriticalPath && toggle) toggle.checked = false;
+}
+
+function applyAttackChainFilters(fitView) {
+    if (!attackChainCytoscape || !window.attackChainOriginalData) return;
+    const search = String(document.getElementById('attack-chain-search')?.value || '').trim().toLowerCase();
+    const type = String(document.getElementById('attack-chain-type-filter')?.value || 'all');
+    const risk = String(document.getElementById('attack-chain-risk-filter')?.value || 'all');
+    const criticalOnly = document.getElementById('attack-chain-critical-toggle')?.checked === true;
+    const riskRanges = {
+        high: [80, 100],
+        'medium-high': [60, 79],
+        medium: [40, 59],
+        low: [0, 39]
+    };
+    const riskRange = riskRanges[risk] || [0, 100];
+
+    attackChainCytoscape.nodes().forEach(node => {
+        const originalLabel = String(node.data('originalLabel') || node.data('label') || '').toLowerCase();
+        const nodeType = String(node.data('type') || '').toLowerCase();
+        const riskScore = Number(node.data('riskScore') || 0);
+        const visible = (!search || originalLabel.includes(search) || nodeType.includes(search)) &&
+            (type === 'all' || nodeType === type) &&
+            (risk === 'all' || (riskScore >= riskRange[0] && riskScore <= riskRange[1])) &&
+            (!criticalOnly || node.data('critical') === 'yes');
+        node.style('display', visible ? 'element' : 'none');
+    });
+
+    attackChainCytoscape.edges().forEach(edge => {
+        const edgeNodes = getEdgeNodes(edge);
+        const visible = edgeNodes.valid &&
+            edgeNodes.source.style('display') !== 'none' &&
+            edgeNodes.target.style('display') !== 'none' &&
+            (!criticalOnly || edge.data('critical') === 'yes');
+        edge.style('display', visible ? 'element' : 'none');
+    });
+
+    if (fitView !== false) {
+        attackChainCytoscape.fit(attackChainCytoscape.elements(':visible'), 60);
+    }
+}
+
+function toggleCriticalAttackPathOnly(enabled) {
+    const toggle = document.getElementById('attack-chain-critical-toggle');
+    if (toggle) toggle.checked = !!enabled;
+    applyAttackChainFilters(true);
+}
+window.toggleCriticalAttackPathOnly = toggleCriticalAttackPathOnly;
 
 // 渲染攻击链
 function renderAttackChain(chainData) {
     const container = document.getElementById('attack-chain-container');
     if (!container) {
         return;
+    }
+    updateAttackChainCriticalControls(chainData);
+    const criticalNodeIDs = new Set(Array.isArray(chainData.critical_node_ids) ? chainData.critical_node_ids : []);
+    const criticalEdgeIDs = new Set(Array.isArray(chainData.critical_edge_ids) ? chainData.critical_edge_ids : []);
+    const hasCriticalPath = criticalNodeIDs.size > 0;
+
+    const previousData = window.attackChainOriginalData;
+    const previousTopology = previousData
+        ? JSON.stringify({
+            nodes: (previousData.nodes || []).map(node => node.id).sort(),
+            edges: (previousData.edges || []).map(edge => edge.id).sort()
+        })
+        : '';
+    const nextTopology = JSON.stringify({
+        nodes: (chainData.nodes || []).map(node => node.id).sort(),
+        edges: (chainData.edges || []).map(edge => edge.id).sort()
+    });
+    const previousViewport = attackChainCytoscape && previousTopology === nextTopology
+        ? { zoom: attackChainCytoscape.zoom(), pan: attackChainCytoscape.pan() }
+        : null;
+    if (attackChainCytoscape) {
+        attackChainCytoscape.destroy();
+        attackChainCytoscape = null;
     }
 
     // 清空容器
@@ -7093,10 +7333,43 @@ function renderAttackChain(chainData) {
         } else if (nodeType === 'action') {
             typeLabel = '行动';
             typeEn = 'ACTION';
+            const stage = String(metadata.stage || '').trim().toLowerCase();
             const findings = metadata.findings || [];
             const hasFindings = Array.isArray(findings) && findings.length > 0;
             const isFailedInsight = (metadata.status || '') === 'failed_insight';
-            if (hasFindings && !isFailedInsight) {
+            if (stage === 'analysis') {
+                typeLabel = '分析';
+                typeEn = 'ANALYZE';
+                typeColor = '#312E81';
+                accentColor = '#6366F1';
+                accentDark = '#4338CA';
+                bgGradientStart = '#FFFFFF';
+                bgGradientEnd = '#EEF2FF';
+            } else if (stage === 'result') {
+                typeLabel = '结果';
+                typeEn = 'RESULT';
+                typeColor = '#164E63';
+                accentColor = '#0891B2';
+                accentDark = '#0E7490';
+                bgGradientStart = '#FFFFFF';
+                bgGradientEnd = '#ECFEFF';
+            } else if (stage === 'completion' && metadata.status === 'completed') {
+                typeLabel = '完成';
+                typeEn = 'DONE';
+                typeColor = '#064E3B';
+                accentColor = '#10B981';
+                accentDark = '#047857';
+                bgGradientStart = '#FFFFFF';
+                bgGradientEnd = '#ECFDF5';
+            } else if (stage === 'completion') {
+                typeLabel = '结束';
+                typeEn = 'ENDED';
+                typeColor = '#7F1D1D';
+                accentColor = '#EF4444';
+                accentDark = '#B91C1C';
+                bgGradientStart = '#FFFFFF';
+                bgGradientEnd = '#FEF2F2';
+            } else if (hasFindings && !isFailedInsight) {
                 typeColor = '#064E3B';
                 accentColor = '#10B981';
                 accentDark = '#047857';
@@ -7173,14 +7446,30 @@ function renderAttackChain(chainData) {
             const rl = riskScore >= 80 ? '严重' : riskScore >= 60 ? '高' : riskScore >= 40 ? '中' : '低';
             badgeText = rl + ' · ' + riskScore;
         } else if (nodeType === 'action') {
+            const stage = String(metadata.stage || '').trim().toLowerCase();
+            const status = String(metadata.status || '').trim().toLowerCase();
             const findings = metadata.findings || [];
-            if (Array.isArray(findings) && findings.length > 0 && metadata.status !== 'failed_insight') {
+            if (stage === 'analysis' || stage === 'result' || stage === 'completion') {
+                const stageStatusLabels = {
+                    running: '进行中',
+                    completed: '已完成',
+                    failed: '失败',
+                    blocked: '已拦截',
+                    cancelled: '已终止',
+                    timeout: '超时'
+                };
+                badgeText = stageStatusLabels[status] || '';
+            } else if (Array.isArray(findings) && findings.length > 0 && metadata.status !== 'failed_insight') {
                 badgeText = '发现 ' + findings.length;
             } else if (metadata.status === 'failed_insight') {
                 badgeText = '有线索';
             }
         } else if (nodeType === 'target') {
             badgeText = '主目标';
+        }
+        const isCriticalNode = criticalNodeIDs.has(node.id);
+        if (isCriticalNode) {
+            badgeText = badgeText ? '关键 · ' + badgeText : '关键路径';
         }
 
         elements.push({
@@ -7200,6 +7489,8 @@ function renderAttackChain(chainData) {
                 iconDataUrl: iconSvg,
                 badgeText: badgeText,
                 riskScore: riskScore,
+                critical: isCriticalNode ? 'yes' : 'no',
+                criticalContext: hasCriticalPath ? 'yes' : 'no',
                 toolExecutionId: node.tool_execution_id || '',
                 metadata: metadata
             }
@@ -7221,7 +7512,9 @@ function renderAttackChain(chainData) {
                     source: edge.source,
                     target: edge.target,
                     type: edge.type || 'leads_to',
-                    weight: edge.weight || 1
+                    weight: edge.weight || 1,
+                    critical: criticalEdgeIDs.has(edge.id) ? 'yes' : 'no',
+                    criticalContext: hasCriticalPath ? 'yes' : 'no'
                 }
             });
         } else {
@@ -7345,6 +7638,24 @@ function renderAttackChain(chainData) {
                 }
             },
             {
+                selector: 'node[criticalContext = "yes"][critical = "no"]',
+                style: {
+                    'opacity': 0.38
+                }
+            },
+            {
+                selector: 'node[critical = "yes"]',
+                style: {
+                    'border-width': 4,
+                    'border-color': '#DC2626',
+                    'border-opacity': 1,
+                    'underlay-color': '#FEE2E2',
+                    'underlay-opacity': 0.72,
+                    'underlay-padding': 6,
+                    'z-index': 50
+                }
+            },
+            {
                 selector: 'edge',
                 style: {
                     'width': function(ele) {
@@ -7387,6 +7698,24 @@ function renderAttackChain(chainData) {
                 }
             },
             {
+                selector: 'edge[criticalContext = "yes"][critical = "no"]',
+                style: {
+                    'opacity': 0.2
+                }
+            },
+            {
+                selector: 'edge[critical = "yes"]',
+                style: {
+                    'width': 4.5,
+                    'line-color': '#DC2626',
+                    'target-arrow-color': '#DC2626',
+                    'arrow-scale': 1.55,
+                    'opacity': 1,
+                    'line-style': 'solid',
+                    'z-index': 40
+                }
+            },
+            {
                 selector: 'node:selected',
                 style: {
                     'border-width': 3.5,
@@ -7405,6 +7734,7 @@ function renderAttackChain(chainData) {
         minZoom: 0.2,
         maxZoom: 3
     });
+    const renderedAttackChainCytoscape = attackChainCytoscape;
 
     // 使用ELK布局（高质量DAG布局，减少边交叉）
     let layoutOptions = {
@@ -7480,10 +7810,11 @@ function renderAttackChain(chainData) {
 
             // 使用ELK计算布局
             elkInstance.layout(elkGraph).then(laidOutGraph => {
+                if (attackChainCytoscape !== renderedAttackChainCytoscape) return;
                 // 应用ELK计算的布局到Cytoscape节点
                 if (laidOutGraph && laidOutGraph.children) {
                     laidOutGraph.children.forEach(elkNode => {
-                        const cyNode = attackChainCytoscape.getElementById(elkNode.id);
+                        const cyNode = renderedAttackChainCytoscape.getElementById(elkNode.id);
                         if (cyNode && elkNode.x !== undefined && elkNode.y !== undefined) {
                             cyNode.position({
                                 x: elkNode.x + (elkNode.width || 0) / 2,
@@ -7500,9 +7831,10 @@ function renderAttackChain(chainData) {
                     throw new Error('ELK布局返回无效结果');
                 }
             }).catch(err => {
+                if (attackChainCytoscape !== renderedAttackChainCytoscape) return;
                 console.warn('ELK布局计算失败，使用默认布局:', err);
                 // 回退到默认布局
-                const layout = attackChainCytoscape.layout(layoutOptions);
+                const layout = renderedAttackChainCytoscape.layout(layoutOptions);
                 layout.one('layoutstop', () => {
                     setTimeout(() => {
                         centerAttackChain();
@@ -7513,7 +7845,7 @@ function renderAttackChain(chainData) {
         } catch (e) {
             console.warn('ELK布局初始化失败，使用默认布局:', e);
             // 回退到默认布局
-            const layout = attackChainCytoscape.layout(layoutOptions);
+            const layout = renderedAttackChainCytoscape.layout(layoutOptions);
             layout.one('layoutstop', () => {
                 setTimeout(() => {
                     centerAttackChain();
@@ -7524,7 +7856,7 @@ function renderAttackChain(chainData) {
     } else {
         console.warn('ELK.js未加载，使用默认布局。请检查elkjs库是否正确加载。');
         // 使用默认布局
-        const layout = attackChainCytoscape.layout(layoutOptions);
+        const layout = renderedAttackChainCytoscape.layout(layoutOptions);
         layout.one('layoutstop', () => {
             setTimeout(() => {
                 centerAttackChain();
@@ -7536,10 +7868,15 @@ function renderAttackChain(chainData) {
     // 居中攻击链的函数：始终让所有节点完整可见
     function centerAttackChain() {
         try {
-            if (!attackChainCytoscape) {
+            if (attackChainCytoscape !== renderedAttackChainCytoscape) {
                 return;
             }
-            const container = attackChainCytoscape.container();
+            if (previousViewport) {
+                renderedAttackChainCytoscape.zoom(previousViewport.zoom);
+                renderedAttackChainCytoscape.pan(previousViewport.pan);
+                return;
+            }
+            const container = renderedAttackChainCytoscape.container();
             if (!container) return;
             const containerWidth = container.offsetWidth;
             const containerHeight = container.offsetHeight;
@@ -7551,12 +7888,12 @@ function renderAttackChain(chainData) {
             // 使用较大 padding 让节点不贴边，视觉上更舒适
             // 核心原则：完全依赖 fit 的结果来保证全局可见，不强制最小缩放
             const padding = 60;
-            attackChainCytoscape.fit(undefined, padding);
+            renderedAttackChainCytoscape.fit(undefined, padding);
 
             // 只在极端情况下微调：小图（2-3 节点）fit 后缩放过大时适当降低
             setTimeout(() => {
-                if (!attackChainCytoscape) return;
-                const currentZoom = attackChainCytoscape.zoom();
+                if (attackChainCytoscape !== renderedAttackChainCytoscape) return;
+                const currentZoom = renderedAttackChainCytoscape.zoom();
                 // 上限：避免节点占满屏幕看起来过大
                 const MAX_INITIAL_ZOOM = 1.25;
                 // 下限：避免极小图看不清（极小图通常节点很少）
@@ -7571,15 +7908,15 @@ function renderAttackChain(chainData) {
                 }
 
                 if (Math.abs(targetZoom - currentZoom) > 0.01) {
-                    const extent = attackChainCytoscape.extent();
+                    const extent = renderedAttackChainCytoscape.extent();
                     const cx = (extent.x1 + extent.x2) / 2;
                     const cy = (extent.y1 + extent.y2) / 2;
-                    attackChainCytoscape.zoom({
+                    renderedAttackChainCytoscape.zoom({
                         level: targetZoom,
                         position: { x: cx, y: cy }
                     });
                 }
-                attackChainCytoscape.center();
+                renderedAttackChainCytoscape.center();
             }, 60);
         } catch (error) {
             console.warn('居中图表时出错:', error);
@@ -7619,21 +7956,13 @@ function renderAttackChain(chainData) {
 
     attackChainCytoscape.on('mouseout', 'node', function(evt) {
         const node = evt.target;
-        const type = node.data('type');
-        const defaultBorderWidth = (type === 'target' || type === 'vulnerability') ? 2 : 1.5;
-        node.style({
-            'border-width': defaultBorderWidth,
-            'border-color': node.data('accentColor') || '#94a3b8',
-            'border-opacity': 0.5,
-            'overlay-opacity': 0,
-            'overlay-padding': 0,
-            'z-index': 0
-        });
-        attackChainCytoscape.edges().style({ 'opacity': 0.88, 'width': '' });
+        node.removeStyle('border-width border-color border-opacity overlay-color overlay-opacity overlay-padding z-index');
+        attackChainCytoscape.edges().removeStyle('opacity width');
     });
 
     // 保存原始数据用于过滤
     window.attackChainOriginalData = chainData;
+    applyAttackChainFilters(false);
 }
 
 // 安全地获取边的源节点和目标节点
@@ -7656,157 +7985,23 @@ function getEdgeNodes(edge) {
 
 // 过滤攻击链节点（按搜索关键词）
 function filterAttackChainNodes(searchText) {
-    if (!attackChainCytoscape || !window.attackChainOriginalData) {
-        return;
-    }
-
-    const searchLower = searchText.toLowerCase().trim();
-    if (searchLower === '') {
-        // 重置所有节点可见性
-        attackChainCytoscape.nodes().style('display', 'element');
-        attackChainCytoscape.edges().style('display', 'element');
-        // 恢复默认边框
-        attackChainCytoscape.nodes().style('border-width', 2);
-        return;
-    }
-
-    // 过滤节点
-    attackChainCytoscape.nodes().forEach(node => {
-        // 使用原始标签进行搜索，不包含类型标签
-        const originalLabel = node.data('originalLabel') || node.data('label') || '';
-        const label = originalLabel.toLowerCase();
-        const type = (node.data('type') || '').toLowerCase();
-        const matches = label.includes(searchLower) || type.includes(searchLower);
-
-        if (matches) {
-            node.style('display', 'element');
-            // 高亮匹配的节点
-            node.style('border-width', 4);
-            node.style('border-color', '#0066ff');
-        } else {
-            node.style('display', 'none');
-        }
-    });
-
-    // 隐藏没有可见源节点或目标节点的边
-    attackChainCytoscape.edges().forEach(edge => {
-        const { source, target, valid } = getEdgeNodes(edge);
-        if (!valid) {
-            edge.style('display', 'none');
-            return;
-        }
-
-        const sourceVisible = source.style('display') !== 'none';
-        const targetVisible = target.style('display') !== 'none';
-        if (sourceVisible && targetVisible) {
-            edge.style('display', 'element');
-        } else {
-            edge.style('display', 'none');
-        }
-    });
-
-    // 重新调整视图
-    attackChainCytoscape.fit(undefined, 60);
+    const input = document.getElementById('attack-chain-search');
+    if (input && input.value !== searchText) input.value = searchText;
+    applyAttackChainFilters(true);
 }
 
 // 按类型过滤攻击链节点
 function filterAttackChainByType(type) {
-    if (!attackChainCytoscape || !window.attackChainOriginalData) {
-        return;
-    }
-
-    if (type === 'all') {
-        attackChainCytoscape.nodes().style('display', 'element');
-        attackChainCytoscape.edges().style('display', 'element');
-        attackChainCytoscape.nodes().style('border-width', 2);
-        attackChainCytoscape.fit(undefined, 60);
-        return;
-    }
-
-    // 过滤节点
-    attackChainCytoscape.nodes().forEach(node => {
-        const nodeType = node.data('type') || '';
-        if (nodeType === type) {
-            node.style('display', 'element');
-        } else {
-            node.style('display', 'none');
-        }
-    });
-
-    // 隐藏没有可见源节点或目标节点的边
-    attackChainCytoscape.edges().forEach(edge => {
-        const { source, target, valid } = getEdgeNodes(edge);
-        if (!valid) {
-            edge.style('display', 'none');
-            return;
-        }
-
-        const sourceVisible = source.style('display') !== 'none';
-        const targetVisible = target.style('display') !== 'none';
-        if (sourceVisible && targetVisible) {
-            edge.style('display', 'element');
-        } else {
-            edge.style('display', 'none');
-        }
-    });
-
-    // 重新调整视图
-    attackChainCytoscape.fit(undefined, 60);
+    const select = document.getElementById('attack-chain-type-filter');
+    if (select && select.value !== type) select.value = type;
+    applyAttackChainFilters(true);
 }
 
 // 按风险等级过滤攻击链节点
 function filterAttackChainByRisk(riskLevel) {
-    if (!attackChainCytoscape || !window.attackChainOriginalData) {
-        return;
-    }
-
-    if (riskLevel === 'all') {
-        attackChainCytoscape.nodes().style('display', 'element');
-        attackChainCytoscape.edges().style('display', 'element');
-        attackChainCytoscape.nodes().style('border-width', 2);
-        attackChainCytoscape.fit(undefined, 60);
-        return;
-    }
-
-    // 定义风险范围
-    const riskRanges = {
-        'high': [80, 100],
-        'medium-high': [60, 79],
-        'medium': [40, 59],
-        'low': [0, 39]
-    };
-
-    const [minRisk, maxRisk] = riskRanges[riskLevel] || [0, 100];
-
-    // 过滤节点
-    attackChainCytoscape.nodes().forEach(node => {
-        const riskScore = node.data('riskScore') || 0;
-        if (riskScore >= minRisk && riskScore <= maxRisk) {
-            node.style('display', 'element');
-        } else {
-            node.style('display', 'none');
-        }
-    });
-
-    // 隐藏没有可见源节点或目标节点的边
-    attackChainCytoscape.edges().forEach(edge => {
-        const { source, target, valid } = getEdgeNodes(edge);
-        if (!valid) {
-            edge.style('display', 'none');
-            return;
-        }
-
-        const sourceVisible = source.style('display') !== 'none';
-        const targetVisible = target.style('display') !== 'none';
-        if (sourceVisible && targetVisible) {
-            edge.style('display', 'element');
-        } else {
-            edge.style('display', 'none');
-        }
-    });
-
-    // 重新调整视图
-    attackChainCytoscape.fit(undefined, 60);
+    const select = document.getElementById('attack-chain-risk-filter');
+    if (select && select.value !== riskLevel) select.value = riskLevel;
+    applyAttackChainFilters(true);
 }
 
 // 重置攻击链筛选
@@ -7828,16 +8023,9 @@ function resetAttackChainFilters() {
     if (riskFilter) {
         riskFilter.value = 'all';
     }
-
-    // 重置所有节点可见性
-    if (attackChainCytoscape) {
-        attackChainCytoscape.nodes().forEach(node => {
-            node.style('display', 'element');
-            node.style('border-width', 2); // 恢复默认边框
-        });
-        attackChainCytoscape.edges().style('display', 'element');
-        attackChainCytoscape.fit(undefined, 60);
-    }
+    const criticalToggle = document.getElementById('attack-chain-critical-toggle');
+    if (criticalToggle) criticalToggle.checked = false;
+    applyAttackChainFilters(true);
 }
 
 // 显示节点详情
@@ -8020,17 +8208,6 @@ function updateAttackChainStats(chainData) {
     }
 }
 
-// 语言切换时刷新攻击链统计文案（动态 textContent 不会随 applyTranslations 更新）
-document.addEventListener('languagechange', function () {
-    if (window.attackChainOriginalData && typeof updateAttackChainStats === 'function') {
-        updateAttackChainStats(window.attackChainOriginalData);
-    } else {
-        const statsEl = document.getElementById('attack-chain-stats');
-        if (statsEl && typeof window.t === 'function') {
-            statsEl.textContent = window.t('attackChainModal.nodesEdges', { nodes: 0, edges: 0 });
-        }
-    }
-});
 
 // 关闭节点详情
 function closeNodeDetails() {
@@ -8056,7 +8233,13 @@ function closeNodeDetails() {
 
 // 关闭攻击链模态框
 function closeAttackChainModal() {
+    const closedConversationId = currentAttackChainConversationId;
     closeAppModal('attack-chain-modal');
+    clearAttackChainRefreshTimers();
+    if (closedConversationId) {
+        attackChainRefreshPending.delete(closedConversationId);
+        setAttackChainLoading(closedConversationId, false);
+    }
 
     // 关闭节点详情
     closeNodeDetails();
@@ -8068,26 +8251,34 @@ function closeAttackChainModal() {
     }
 
     currentAttackChainConversationId = null;
-}
-
-// 刷新攻击链（重新加载）
-// 注意：此函数允许在加载过程中调用，用于检查生成状态
-function refreshAttackChain() {
-    if (currentAttackChainConversationId) {
-        // 临时允许刷新，即使正在加载中（用于检查生成状态）
-        const wasLoading = isAttackChainLoading(currentAttackChainConversationId);
-        setAttackChainLoading(currentAttackChainConversationId, false); // 临时重置，允许刷新
-        loadAttackChain(currentAttackChainConversationId).finally(() => {
-            // 如果之前正在加载（409 情况），恢复加载状态
-            // 否则保持 false（正常完成）
-            if (wasLoading) {
-                // 检查是否仍然需要保持加载状态（如果还是 409，会在 loadAttackChain 中处理）
-                // 这里我们假设如果成功加载，则重置状态
-                // 如果还是 409，loadAttackChain 会保持加载状态
-            }
-        });
+    attackChainLiveRevision = '';
+    updateAttackChainCriticalControls({ critical_node_ids: [] });
+    const hashParts = window.location.hash.slice(1).split('?');
+    if (hashParts[0] === 'chat' && hashParts.length > 1) {
+        const params = new URLSearchParams(hashParts.slice(1).join('?'));
+        if (params.get('view') === 'attack-chain') {
+            params.delete('view');
+            window.history.replaceState(null, '', '#chat?' + params.toString());
+        }
     }
 }
+
+function refreshAttackChain() {
+    if (currentAttackChainConversationId) {
+        loadAttackChain(currentAttackChainConversationId, { silent: true });
+    }
+}
+
+function openLiveAttackGraph(conversationId, options) {
+    const cid = String(conversationId || '').trim();
+    if (!cid) return;
+    options = options || {};
+    if (options.updateHash !== false) {
+        window.history.replaceState(null, '', attackGraphDeepLink(cid));
+    }
+    return showAttackChain(cid, { live: true });
+}
+window.openLiveAttackGraph = openLiveAttackGraph;
 
 // 重新生成攻击链
 async function regenerateAttackChain() {
@@ -8103,6 +8294,10 @@ async function regenerateAttackChain() {
 
     // 保存请求时的对话ID，防止串台
     const savedConversationId = currentAttackChainConversationId;
+    clearAttackChainSummaryRetry();
+    attackChainLiveMode = false;
+    attackChainLiveRevision = '';
+    updateAttackChainLiveStatus('syncing');
     setAttackChainLoading(savedConversationId, true);
 
     const container = document.getElementById('attack-chain-container');
@@ -8127,7 +8322,6 @@ async function regenerateAttackChain() {
         if (!response.ok) {
             // 处理 409 Conflict（正在生成中）
             if (response.status === 409) {
-                const error = await response.json();
                 if (container) {
                     container.innerHTML = `
                         <div class="loading-spinner" style="text-align: center; padding: 40px;">
@@ -8141,15 +8335,7 @@ async function regenerateAttackChain() {
                         </div>
                     `;
                 }
-                // 5秒后自动刷新
-                // savedConversationId 已在函数开始处定义
-                setTimeout(() => {
-                    // 检查当前显示的对话ID是否匹配，且仍在加载中
-                    if (currentAttackChainConversationId === savedConversationId &&
-                        isAttackChainLoading(savedConversationId)) {
-                        refreshAttackChain();
-                    }
-                }, 5000);
+                scheduleAttackChainSummaryRetry(savedConversationId);
                 return;
             }
 
@@ -8174,11 +8360,15 @@ async function regenerateAttackChain() {
 
         // 更新统计信息
         updateAttackChainStats(chainData);
+        updateAttackChainLiveStatus('summary');
 
     } catch (error) {
         console.error('重新生成攻击链失败:', error);
         if (container) {
             container.innerHTML = `<div class="error-message">重新生成失败: ${error.message}</div>`;
+        }
+        if (!attackChainLiveMode && currentAttackChainConversationId === savedConversationId) {
+            updateAttackChainLiveStatus('summary');
         }
     } finally {
         setAttackChainLoading(savedConversationId, false);
@@ -10241,17 +10431,12 @@ async function showConversationContextMenu(event) {
             const isRunning = typeof isConversationTaskRunning === 'function'
                 ? isConversationTaskRunning(convId)
                 : false;
-            if (isRunning) {
-                attackChainMenuItem.style.opacity = '0.5';
-                attackChainMenuItem.style.cursor = 'not-allowed';
-                attackChainMenuItem.onclick = null;
-                attackChainMenuItem.title = '当前对话正在执行，请稍后再生成攻击链';
-            } else {
-                attackChainMenuItem.style.opacity = '1';
-                attackChainMenuItem.style.cursor = 'pointer';
-                attackChainMenuItem.onclick = showAttackChainFromContext;
-                attackChainMenuItem.title = (typeof window.t === 'function' ? window.t('chat.viewAttackChainCurrentConv') : '查看当前对话的攻击链');
-            }
+            attackChainMenuItem.style.opacity = '1';
+            attackChainMenuItem.style.cursor = 'pointer';
+            attackChainMenuItem.onclick = showAttackChainFromContext;
+            attackChainMenuItem.title = isRunning
+                ? (typeof window.t === 'function' ? window.t('chat.viewLiveAttackChainCurrentConv') : '查看当前对话的实时攻击图')
+                : (typeof window.t === 'function' ? window.t('chat.viewAttackChainCurrentConv') : '查看当前对话的攻击链');
         } else {
             attackChainMenuItem.style.opacity = '0.5';
             attackChainMenuItem.style.cursor = 'not-allowed';
@@ -10528,14 +10713,14 @@ function showAttackChainFromContext() {
     if (!convId) return;
 
     closeContextMenu();
-    showAttackChain(convId);
+    openLiveAttackGraph(convId);
 }
 
 function formatConversationDateForMarkdown(value) {
     if (!value) return '';
     const d = new Date(value);
     if (isNaN(d.getTime())) return '';
-    const locale = (typeof window.__locale === 'string' && window.__locale.startsWith('zh')) ? 'zh-CN' : 'en-US';
+    const locale = 'zh-CN';
     return d.toLocaleString(locale, {
         year: 'numeric',
         month: '2-digit',
@@ -10905,7 +11090,7 @@ function renderBatchConversations(filtered = null) {
         const time = document.createElement('div');
         time.className = 'batch-table-col-time';
         const dateObj = conv.updatedAt ? new Date(conv.updatedAt) : new Date();
-        const locale = (typeof i18next !== 'undefined' && i18next.language) ? i18next.language : 'zh-CN';
+        const locale = 'zh-CN';
         time.textContent = dateObj.toLocaleString(locale, {
             year: 'numeric',
             month: '2-digit',
@@ -11034,92 +11219,7 @@ function closeBatchManageModal() {
     allConversationsForBatch = [];
 }
 
-// 语言切换时刷新当前聊天页内的时间与动态文案（消息时间、执行流程时间由 monitor 的 refreshProgressAndTimelineI18n 处理）
-function refreshChatPanelI18n() {
-    const locale = (typeof window.__locale === 'string' && window.__locale.startsWith('zh')) ? 'zh-CN' : 'en-US';
-    const timeOpts = { hour: '2-digit', minute: '2-digit' };
-    if (locale === 'zh-CN') timeOpts.hour12 = false;
-    const t = typeof window.t === 'function' ? window.t : function (k) { return k; };
 
-    const messagesEl = document.getElementById('chat-messages');
-    if (messagesEl) {
-        messagesEl.querySelectorAll('.message-time[data-message-time]').forEach(function (el) {
-            try {
-                const d = new Date(el.dataset.messageTime);
-                if (!isNaN(d.getTime())) {
-                    el.textContent = d.toLocaleTimeString(locale, timeOpts);
-                }
-            } catch (e) { /* ignore */ }
-        });
-        messagesEl.querySelectorAll('.process-detail-btn').forEach(function (btn) {
-            const span = btn.querySelector('span');
-            if (!span) return;
-            const assistantEl = btn.closest('.message.assistant');
-            const messageId = assistantEl && assistantEl.id;
-            const detailsId = messageId ? 'process-details-' + messageId : '';
-            const timeline = detailsId ? document.getElementById(detailsId) && document.getElementById(detailsId).querySelector('.progress-timeline') : null;
-            const expanded = timeline && timeline.classList.contains('expanded');
-            span.textContent = expanded ? t('tasks.collapseDetail') : t('chat.expandDetail');
-        });
-        const copyLabel = t('common.copy');
-        const copyTitle = t('chat.copyMessageTitle');
-        messagesEl.querySelectorAll('.message-copy-btn').forEach(function (btn) {
-            if (btn.dataset.copySuccessActive === '1') return;
-            const span = btn.querySelector('span');
-            if (span) span.textContent = copyLabel;
-            btn.title = copyTitle;
-            btn.setAttribute('aria-label', copyTitle);
-        });
-        messagesEl.querySelectorAll('.message.assistant').forEach(function (msgEl) {
-            if (typeof window.syncAssistantTurnSummary === 'function') {
-                window.syncAssistantTurnSummary(msgEl);
-            }
-            if (typeof window.syncMcpToolsToggleButton === 'function') {
-                window.syncMcpToolsToggleButton(msgEl);
-            }
-        });
-        if (window.BalanceLeeChatScroll && typeof window.BalanceLeeChatScroll.refreshTurnRail === 'function') {
-            window.BalanceLeeChatScroll.refreshTurnRail();
-        }
-    }
-
-    if (isAppModalOpen('mcp-detail-modal')) {
-        const detailTimeEl = document.getElementById('detail-time');
-        if (detailTimeEl && detailTimeEl.dataset.detailTimeIso) {
-            try {
-                const d = new Date(detailTimeEl.dataset.detailTimeIso);
-                if (!isNaN(d.getTime())) {
-                    detailTimeEl.textContent = d.toLocaleString(locale);
-                }
-            } catch (e) { /* ignore */ }
-        }
-        const statusEl = document.getElementById('detail-status');
-        if (statusEl && statusEl.dataset.detailStatus !== undefined && typeof getStatusText === 'function') {
-            statusEl.textContent = getStatusText(statusEl.dataset.detailStatus);
-        }
-    }
-}
-
-// 语言切换时刷新批量管理模态框标题（若当前正在显示）；并刷新对话列表时间格式与系统就绪提示；刷新当前页消息时间与动态文案
-document.addEventListener('languagechange', function () {
-    refreshSystemReadyMessageBubbles();
-    refreshChatPanelI18n();
-    if (typeof refreshConversationProjectFilter === 'function') {
-        refreshConversationProjectFilter();
-    }
-    if (typeof refreshBatchProjectFilter === 'function') {
-        refreshBatchProjectFilter().then(() => {
-            const modal = document.getElementById('batch-manage-modal');
-            if (modal && isAppModalOpen('batch-manage-modal') && typeof applyBatchConversationFilters === 'function') {
-                applyBatchConversationFilters();
-            }
-        });
-    }
-    // 侧边栏最近对话等列表的时间戳会随语言变化（24h/12h 等），重新拉列表以统一格式
-    if (typeof loadConversations === 'function') {
-        loadConversations();
-    }
-});
 
 // 初始化时加载对话列表
 document.addEventListener('DOMContentLoaded', async () => {

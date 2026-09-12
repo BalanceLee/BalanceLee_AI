@@ -573,10 +573,14 @@
         if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE')) {
             options.body = JSON.stringify(data);
         }
-        if (typeof apiFetch === 'function') {
-            return apiFetch(url, options).then(r => r.json());
-        }
-        return fetch(url, options).then(r => r.json());
+        const request = typeof apiFetch === 'function' ? apiFetch(url, options) : fetch(url, options);
+        return request.then(async function(response) {
+            const payload = await response.json().catch(function() { return {}; });
+            if (!response.ok && !payload.error) {
+                payload.error = '请求失败（HTTP ' + response.status + '）';
+            }
+            return payload;
+        });
     }
 
     function showToast(message, type = 'info') {
@@ -823,7 +827,7 @@
 
     C2.init = function() {
         const pageId = window.currentPageId || '';
-        
+
         if (pageId.startsWith('c2')) {
             C2.connectEventStream();
         }
@@ -1256,12 +1260,18 @@
             const emptyProfHint = (C2.profiles && C2.profiles.length > 0)
                 ? ''
                 : `<div class="form-hint form-hint--warning" style="margin-bottom:6px;">${escapeHtml(c2t('c2.listeners.malleableProfileEmptyListHint'))}</div>`;
+            const isRunning = String(l.status || '').toLowerCase() === 'running';
+            const runtimeDisabled = isRunning ? ' disabled' : '';
+            const runningHint = isRunning
+                ? `<div class="form-hint form-hint--warning" style="margin-bottom:12px;">${escapeHtml(c2t('c2.listeners.runningEditHint'))}</div>`
+                : '';
             content.innerHTML = `
             <div class="c2-modal-header">
                 <h3>${escapeHtml(c2t('c2.listeners.editTitle'))}</h3>
                 <button class="c2-modal-close" onclick="C2.closeModal()">&times;</button>
             </div>
             <div class="c2-modal-body">
+                ${runningHint}
                 <div class="c2-form-group">
                     <label>${escapeHtml(c2t('c2.listeners.name'))}</label>
                     <input type="text" id="c2-listener-name" class="form-control" value="${escapeAttr(l.name)}">
@@ -1273,22 +1283,22 @@
                 <div class="c2-form-row">
                     <div class="c2-form-group">
                         <label>${escapeHtml(c2t('c2.listeners.bindHost'))}</label>
-                        <input type="text" id="c2-listener-host" class="form-control" value="${escapeAttr(String(l.bindHost))}">
+                        <input type="text" id="c2-listener-host" class="form-control" value="${escapeAttr(String(l.bindHost))}"${runtimeDisabled}>
                     </div>
                     <div class="c2-form-group">
                         <label>${escapeHtml(c2t('c2.listeners.bindPort'))}</label>
-                        <input type="number" id="c2-listener-port" class="form-control" value="${l.bindPort}">
+                        <input type="number" id="c2-listener-port" class="form-control" value="${l.bindPort}" min="1" max="65535"${runtimeDisabled}>
                     </div>
                 </div>
                 <div class="c2-form-group" id="c2-listener-profile-group">
                     <label>${escapeHtml(c2t('c2.listeners.malleableProfile'))}</label>
                     ${httpHint}${emptyProfHint}
-                    <select id="c2-listener-profile-id" class="form-control c2-form-select-native">${profileOpts}</select>
+                    <select id="c2-listener-profile-id" class="form-control c2-form-select-native"${runtimeDisabled}>${profileOpts}</select>
                     <div class="form-hint">${escapeHtml(c2t('c2.listeners.malleableProfileHint'))}</div>
                 </div>
                 <div class="c2-form-group">
                     <label>${escapeHtml(c2t('c2.listeners.callbackHost'))}</label>
-                    <input type="text" id="c2-listener-callback-host" class="form-control" value="${escapeAttr(cbHost)}">
+                    <input type="text" id="c2-listener-callback-host" class="form-control" value="${escapeAttr(cbHost)}"${runtimeDisabled}>
                     <div class="form-hint">${escapeHtml(c2t('c2.listeners.callbackHostHint'))}</div>
                 </div>
                 <div class="c2-form-group">
@@ -1298,15 +1308,15 @@
                 ${lt === 'tcp_reverse' ? `
                 <div class="c2-form-group" id="c2-listener-legacy-shell-group">
                     <label class="c2-checkbox-label">
-                        <input type="checkbox" id="c2-listener-legacy-shell"${legacyShell ? ' checked' : ''}>
+                        <input type="checkbox" id="c2-listener-legacy-shell"${legacyShell ? ' checked' : ''}${runtimeDisabled}>
                         ${escapeHtml(c2t('c2.listeners.allowLegacyShell'))}
                     </label>
                     <div class="form-hint form-hint--warning">${escapeHtml(c2t('c2.listeners.allowLegacyShellHint'))}</div>
                 </div>` : ''}
             </div>
             <div class="c2-modal-footer">
-                <button class="btn-secondary" onclick="C2.closeModal()">${escapeHtml(c2t('common.cancel'))}</button>
-                <button class="btn-primary" data-c2-action="listener-save" data-c2-id="${escapeAttr(l.id)}">${escapeHtml(c2t('common.save'))}</button>
+                <button type="button" class="btn-secondary" onclick="C2.closeModal()">${escapeHtml(c2t('common.cancel'))}</button>
+                <button type="button" id="c2-listener-save-btn" class="btn-primary" data-c2-action="listener-save" data-c2-id="${escapeAttr(l.id)}">${escapeHtml(c2t('common.save'))}</button>
             </div>
         `;
             C2.refreshFormSelects(content);
@@ -1318,13 +1328,19 @@
 
     C2.saveListener = function(id) {
         const name = document.getElementById('c2-listener-name')?.value.trim();
-        const bindHost = document.getElementById('c2-listener-host')?.value;
+        const bindHost = document.getElementById('c2-listener-host')?.value?.trim() || '127.0.0.1';
         const bindPort = parseInt(document.getElementById('c2-listener-port')?.value);
         const callbackHost = document.getElementById('c2-listener-callback-host')?.value?.trim() ?? '';
         const remark = document.getElementById('c2-listener-remark')?.value;
         const profileEl = document.getElementById('c2-listener-profile-id');
         const profileId = profileEl ? String(profileEl.value || '').trim() : '';
         const legacyEl = document.getElementById('c2-listener-legacy-shell');
+        const saveBtn = document.getElementById('c2-listener-save-btn');
+        if (!name || !Number.isInteger(bindPort) || bindPort < 1 || bindPort > 65535) {
+            showToast(c2t('c2.listeners.toastInvalidEdit'), 'error');
+            return;
+        }
+        if (saveBtn && saveBtn.disabled) return;
         const body = {
             name, bind_host: bindHost, bind_port: bindPort, remark,
             callback_host: callbackHost,
@@ -1339,12 +1355,24 @@
             body.config = merged;
         }
 
-        apiRequest('PUT', `${API_BASE}/listeners/${id}`, body).then(data => {
+        const originalText = saveBtn ? saveBtn.textContent : '';
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.textContent = c2t('c2.listeners.saving');
+        }
+        return apiRequest('PUT', `${API_BASE}/listeners/${id}`, body).then(data => {
             if (data.error) showToast(data.error, 'error');
             else {
                 showToast(c2t('c2.listeners.toastUpdated'), 'success');
                 C2.closeModal();
                 C2.loadListeners();
+            }
+        }).catch(error => {
+            showToast(error && error.message ? error.message : c2t('c2.listeners.toastUpdateFailed'), 'error');
+        }).finally(() => {
+            if (saveBtn && document.body.contains(saveBtn)) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText || c2t('common.save');
             }
         });
     };
@@ -1524,7 +1552,7 @@
             const userEmpty = isEmptyInfoValue(s.username);
             const osEmpty = isEmptyInfoValue(s.os) && isEmptyInfoValue(s.arch);
             return `
-            <div class="c2-session-item ${s.id === C2.selectedSessionId ? 'active' : ''}" 
+            <div class="c2-session-item ${s.id === C2.selectedSessionId ? 'active' : ''}"
                  data-status="${escapeAttr(s.status || '')}"
                  data-c2-action="session-select"
                  data-c2-id="${escapeAttr(s.id)}"
@@ -1625,14 +1653,14 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="c2-session-tabs c2-session-tabs--pills">
                     <button type="button" class="c2-session-tab${tabCls('terminal')}" data-tab="terminal" onclick="C2.switchTab('terminal')">${escapeHtml(c2t('c2.sessions.terminal'))}</button>
                     <button type="button" class="c2-session-tab${tabCls('files')}" data-tab="files" onclick="C2.switchTab('files')">${escapeHtml(c2t('c2.sessions.files'))}</button>
                     <button type="button" class="c2-session-tab${tabCls('tasks')}" data-tab="tasks" onclick="C2.switchTab('tasks')">${escapeHtml(c2t('c2.sessions.tasks'))}</button>
                     <button type="button" class="c2-session-tab${tabCls('info')}" data-tab="info" onclick="C2.switchTab('info')">${escapeHtml(c2t('c2.sessions.info'))}</button>
                 </div>
-                
+
                 <div class="c2-session-tab-content">
                     <div id="c2-tab-terminal" class="c2-tab-panel${panelCls('terminal')}" style="${panelDisplay('terminal')}">
                         <div id="c2-terminal-container" class="c2-terminal-container"></div>
@@ -2782,7 +2810,7 @@
 
         const container = document.getElementById('c2-file-list');
         const breadcrumb = document.getElementById('c2-current-path');
-        
+
         if (container) container.innerHTML = '<div class="c2-loading">' + escapeHtml(c2t('c2.files.loading')) + '</div>';
 
         apiRequest('POST', `${API_BASE}/tasks`, {
@@ -3428,7 +3456,7 @@
             if (typeof data.pending_queued_count === 'number') {
                 C2.tasksPendingQueuedCount = data.pending_queued_count;
             }
-            
+
             if (!container) return;
 
             const refreshBtn = escapeHtml(c2t('c2.tasks.refresh'));
@@ -3451,7 +3479,7 @@
                     </div>`;
                 return;
             }
-            
+
             container.innerHTML = `
                 <div class="c2-session-tasks-panel">
                     <div class="c2-session-tasks-toolbar">
@@ -4595,21 +4623,5 @@
         if (window.currentPageId?.startsWith('c2')) C2.init();
     }
 
-    document.addEventListener('languagechange', function () {
-        try {
-            if (!window.currentPageId || !String(window.currentPageId).startsWith('c2')) return;
-            if (typeof applyTranslations === 'function') applyTranslations(document);
-            C2.init();
-            if (isAppModalOpen('c2-modal')) {
-                C2.refreshFormSelects();
-            }
-            if (C2.selectedSessionId && (window.currentPageId === 'c2-sessions')) {
-                C2.renderSessions();
-                C2.renderSessionDetail(C2.selectedSessionId);
-            }
-        } catch (e) {
-            console.warn('languagechange C2 refresh failed', e);
-        }
-    });
 
 })();

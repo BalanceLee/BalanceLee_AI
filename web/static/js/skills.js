@@ -1084,20 +1084,6 @@ function escapeAttr(text) {
     return escapeHtml(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// 语言切换时重新渲染当前页（技能列表与分页使用 _t，需随语言更新）
-document.addEventListener('languagechange', function () {
-    const page = document.getElementById('page-skills-management');
-    if (page && page.classList.contains('active')) {
-        renderSkillsList();
-        if (!skillsSearchKeyword) {
-            renderSkillsPagination();
-        }
-    }
-    const pkg = document.getElementById('skill-package-editor');
-    if (pkg && pkg.style.display !== 'none' && currentEditingSkillName) {
-        renderSkillPackageTree();
-    }
-});
 
 document.addEventListener('DOMContentLoaded', function () {
     startSkillsAutoRefresh();

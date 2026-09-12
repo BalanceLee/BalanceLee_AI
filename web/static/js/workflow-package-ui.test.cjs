@@ -51,9 +51,8 @@ test('导入请求标识生成失败会进入中文错误处理', () => {
     assert.match(workflows, /async function performWorkflowPackageImport\(request\)[\s\S]*?try\s*\{[\s\S]*?client\.createIdempotencyKey\(\)[\s\S]*?catch \(error\) \{\s*displayWorkflowPackageError\(error\)/);
 });
 
-test('工作流包动态状态同时提供中文和英文词条', () => {
+test('工作流包动态状态提供完整中文词条', () => {
     const zh = JSON.parse(fs.readFileSync('web/static/i18n/zh-CN.json', 'utf8'));
-    const en = JSON.parse(fs.readFileSync('web/static/i18n/en-US.json', 'utf8'));
     const keys = [
         ['errors', 'invalidArchive'],
         ['conflict', 'idConflict'],
@@ -63,13 +62,7 @@ test('工作流包动态状态同时提供中文和英文词条', () => {
     ];
     keys.forEach(([section, key]) => {
         assert.equal(typeof zh.workflows.package[section][key], 'string');
-        assert.equal(typeof en.workflows.package[section][key], 'string');
     });
-});
-
-test('语言切换会刷新工作流包弹窗及其动态状态', () => {
-    const workflows = fs.readFileSync('web/static/js/workflows.js', 'utf8');
-    assert.match(workflows, /function refreshWorkflowsI18n\(\)[\s\S]*?workflow-package-import-modal[\s\S]*?workflow-package-overwrite-modal[\s\S]*?renderWorkflowPackageInspection\(\)[\s\S]*?renderWorkflowPackageResolution\(\)/);
 });
 
 test('每次打开导入弹窗都会开始新的导入会话', () => {

@@ -1,7 +1,7 @@
 # API Recipes
 
 
-本文给出外部脚本或插件常用的 API 调用配方。完整字段以 `/api-docs` 和 `/api/openapi/spec` 为准。
+本文给出外部脚本或插件常用的 API 调用配方。接入方应固定并验证所依赖的请求字段，升级时按实际接口回归。
 
 ## Recipe 1：登录并验证
 
@@ -105,7 +105,7 @@ curl -k https://127.0.0.1:8080/api/vulnerabilities \
   }'
 ```
 
-字段以 OpenAPI 为准。
+字段要求以当前服务端接口校验和本项目文档示例为准。
 
 ## Recipe 7：查询知识库
 

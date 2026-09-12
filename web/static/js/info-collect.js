@@ -1738,9 +1738,6 @@ window.toggleFofaColumn = toggleFofaColumn;
 window.exportFofaResults = exportFofaResults;
 window.batchScanSelectedFofaRows = batchScanSelectedFofaRows;
 
-document.addEventListener('languagechange', function () {
-    updateSelectedMeta();
-});
 
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () { updateSelectedMeta(); });

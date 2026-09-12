@@ -3,7 +3,6 @@ function _t(key, opts) {
     return typeof window.t === 'function' ? window.t(key, opts) : key;
 }
 
-// 返回「知识库未启用」提示区块的 HTML（使用 data-i18n 以便语言切换时自动更新）
 function getKnowledgeNotEnabledHTML() {
     return `
         <div class="empty-state" style="text-align: center; padding: 40px 20px;">
@@ -1948,21 +1947,6 @@ window.addEventListener('click', function(event) {
     }
 });
 
-// 语言切换时重新渲染检索历史列表与统计，使动态内容随语言更新；知识管理页的「未启用」区块已使用 data-i18n，会由 applyTranslations(document) 自动更新
-document.addEventListener('languagechange', function () {
-    var cur = typeof window.currentPage === 'function' ? window.currentPage() : (window.currentPage || '');
-    if (cur === 'knowledge-retrieval-logs') {
-        if (retrievalLogsData && retrievalLogsData.length >= 0) {
-            renderRetrievalLogs(retrievalLogsData);
-        }
-    } else if (cur === 'knowledge-management') {
-        // 仅对「知识库未启用」状态：已有 data-i18n，applyTranslations 已处理；此处可选地重新应用一次以兼容旧 DOM
-        var listEl = document.getElementById('knowledge-items-list');
-        if (listEl && typeof window.applyTranslations === 'function') {
-            window.applyTranslations(listEl);
-        }
-    }
-});
 
 // 页面切换时加载数据
 if (typeof switchPage === 'function') {

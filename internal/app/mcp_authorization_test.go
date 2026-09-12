@@ -22,10 +22,10 @@ func TestMCPToolAuthorizerEnforcesPermissionAndResource(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	user, err := db.CreateRBACUser("mcp-user", "MCP User", "hash", true, nil)
-	if err != nil {
+	if err := db.BootstrapAdmin("hash"); err != nil {
 		t.Fatal(err)
 	}
+	user := &database.RBACUser{ID: "admin", Username: "admin"}
 	for _, id := range []string{"ws_allowed", "ws_hidden"} {
 		if err := db.CreateWebshellConnection(&database.WebShellConnection{ID: id, URL: "http://127.0.0.1/" + id, Type: "php", Method: "post", CmdParam: "cmd", CreatedAt: time.Now()}); err != nil {
 			t.Fatal(err)
@@ -55,10 +55,10 @@ func TestMCPToolAuthorizerEnforcesConversationProjectBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	user, err := db.CreateRBACUser("boundary-user", "Boundary User", "hash", true, nil)
-	if err != nil {
+	if err := db.BootstrapAdmin("hash"); err != nil {
 		t.Fatal(err)
 	}
+	user := &database.RBACUser{ID: "admin", Username: "admin"}
 	project, err := db.CreateProject(&database.Project{Name: "Project 123"})
 	if err != nil {
 		t.Fatal(err)
@@ -164,10 +164,10 @@ func TestMCPExecutionControlAuthorizationUsesExecutionScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	user, err := db.CreateRBACUser("exec-user", "Exec User", "hash", true, nil)
-	if err != nil {
+	if err := db.BootstrapAdmin("hash"); err != nil {
 		t.Fatal(err)
 	}
+	user := &database.RBACUser{ID: "admin", Username: "admin"}
 	if err := db.SaveToolExecution(&mcp.ToolExecution{
 		ID:          "exec-owned",
 		ToolName:    "lab::slow",
@@ -203,10 +203,10 @@ func TestMCPAssetToolAuthorizationUsesAssetPermissionsAndScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	user, err := db.CreateRBACUser("asset-user", "Asset User", "hash", true, nil)
-	if err != nil {
+	if err := db.BootstrapAdmin("hash"); err != nil {
 		t.Fatal(err)
 	}
+	user := &database.RBACUser{ID: "admin", Username: "admin"}
 	owned := &database.Asset{IP: "192.0.2.10", Port: 443, Protocol: "https"}
 	hidden := &database.Asset{IP: "192.0.2.20", Port: 443, Protocol: "https"}
 	if _, err := db.UpsertAssets([]*database.Asset{owned}, user.ID); err != nil {

@@ -275,7 +275,7 @@ test('刷新后的工具调用恢复与实时一致的成功失败徽标', () =>
     assert.match(applySource, /item\.dataset\.toolDisplayStatus = presentation\.status/);
     assert.match(addSource, /initialToolStatus = item\.dataset\.toolDisplayStatus/);
     assert.match(addSource, /applyToolCallStatus\(item, initialToolStatus\)/);
-    assert.match(monitor, /refreshProgressAndTimelineI18n\(\)[\s\S]*?applyToolCallStatus\(item, item\.dataset\.toolDisplayStatus\)/);
+    assert.match(monitor, /applyToolCallStatus\(item, item\.dataset\.toolDisplayStatus\)/);
 });
 
 test('首次实时输出与刷新恢复都保留独立迭代滚动并跟随最新内容', () => {

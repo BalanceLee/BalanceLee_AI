@@ -25,7 +25,6 @@ flowchart LR
 入口在 `cmd/server/`，应用组装在 `internal/app/`。Web 使用 Gin：
 
 - `web/templates/index.html`：主页面。
-- `web/templates/api-docs.html`：API 文档页面。
 - `web/static/js/`：各业务模块前端逻辑。
 - `web/static/css/`：样式。
 
@@ -45,7 +44,6 @@ flowchart LR
 - `project.go`
 - `vulnerability.go`
 - `config.go`
-- `openapi.go`
 
 Handler 负责参数解析、权限中间件后的业务协调和 HTTP 响应。
 

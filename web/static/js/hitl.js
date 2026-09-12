@@ -116,10 +116,7 @@ function hitlPaginationT(key, opts, fallback) {
 }
 
 function hitlLocale() {
-    if (typeof window.__locale === 'string' && window.__locale.length) {
-        return window.__locale.startsWith('zh') ? 'zh-CN' : 'en-US';
-    }
-    return (typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'en-US';
+    return 'zh-CN';
 }
 
 function initHitlPageSizeFromStorage(storageKey, fallbackSize, assignFn) {
@@ -1659,24 +1656,8 @@ function filterHitlLogs() {
     refreshHitlLogs();
 }
 
-function refreshHitlLogsI18n() {
-    if (!document.getElementById('hitl-logs-table-wrap') || !hitlLogsLoaded) return;
-    updateHitlLogsRetentionHint();
-    renderHitlLogsTable(hitlLogsCache);
-}
 
-function refreshHitlPendingI18n() {
-    if (!document.getElementById('hitl-pending-list') || !hitlPendingLoaded) return;
-    refreshHitlPending();
-}
 
-function refreshHitlI18n() {
-    refreshHitlLogsI18n();
-    refreshHitlPendingI18n();
-    syncAllHitlLogFilterSelects();
-    renderHitlLogsPagination();
-    renderHitlPendingPagination();
-}
 
 function renderHitlLogsPagination() {
     renderHitlPagination('hitl-logs-pagination', {
@@ -1870,13 +1851,6 @@ document.addEventListener('DOMContentLoaded', function () {
     setTimeout(reconcileHitlUiState, 0);
 });
 
-document.addEventListener('languagechange', function () {
-    try {
-        refreshHitlI18n();
-    } catch (e) {
-        console.warn('languagechange hitl refresh failed', e);
-    }
-});
 
 // 由 applyHitlSidebarConfig 调用，将侧栏配置同步到后端
 window.syncHitlConfigToServerByCurrentConversation = syncHitlConfigToServerByCurrentConversation;
