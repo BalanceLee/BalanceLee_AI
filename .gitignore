@@ -9,7 +9,6 @@ chat_uploads/
 *.sqlite3
 
 # Local configuration and secrets
-config.yaml
 config.local.yaml
 config.yaml.backup
 *.backup
@@ -19,6 +18,7 @@ config.yaml.backup
 *.pem
 *.key
 *.crt
+# NOTE: config.yaml is intentionally tracked (keys removed by user) so others can clone & run.
 
 # Upgrade / settings backups
 .upgrade-backup/
@@ -26,13 +26,14 @@ config.yaml.backup
 # Eino runtime task board (under skills_dir)
 skills/.eino/
 
-# Build outputs
-cyberstrike-ai
-cyberstrike-ai.exe
-balancelee-ai
-balancelee-ai.exe
-server
-server.exe
+# Build outputs (binary file excluded by default; uncomment to track)
+# cyberstrike-ai
+# cyberstrike-ai.exe
+# balancelee-ai
+# balancelee-ai.exe
+# server
+# server.exe
+# NOTE: balancelee-ai.exe and server.exe are intentionally tracked so others can clone & run.
 *.test
 bin/
 dist/
