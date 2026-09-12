@@ -98,8 +98,6 @@ Skill 放在 `skills/<name>/SKILL.md`。用于提供专题能力、流程说明�
 - 避免把敏感 Key 放到前端。
 - 高风险按钮要有确认和清晰状态反馈。
 
-i18n 规范见 [前端国际化方案](frontend-i18n.md)。
-
 ## OpenAPI
 
 `internal/handler/openapi.go` 维护内置 OpenAPI 输出。新增公开接口后建议同步补：

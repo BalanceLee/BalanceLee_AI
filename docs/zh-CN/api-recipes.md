@@ -1,6 +1,5 @@
 # API Recipes
 
-[English](../en-US/api-recipes.md)
 
 本文给出外部脚本或插件常用的 API 调用配方。完整字段以 `/api-docs` 和 `/api/openapi/spec` 为准。
 

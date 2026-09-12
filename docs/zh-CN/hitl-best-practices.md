@@ -1,6 +1,5 @@
 # 人机协同（HITL）最佳实践
 
-[English](../en-US/hitl-best-practices.md)
 
 人机协同用于在 Agent 执行工具前做审批拦截。它适合控制高风险操作、保留审计痕迹，并在人工审计压力过大时让审计 Agent 接管常规审批。
 

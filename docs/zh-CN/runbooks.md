@@ -1,6 +1,5 @@
 # 运维 Runbooks
 
-[English](../en-US/runbooks.md)
 
 Runbook 是“遇到一个真实任务时照着做”的步骤清单。本文覆盖 BalanceLeeAI 最常见的运维和安全测试操作。
 

@@ -229,10 +229,6 @@ project:
 - WebShell 连接配置存 SQLite，没有单独的主配置开关。
 - `project` 控制跨对话事实黑板注入预算。
 
-## 机器人
-
-`robots` 支持个人微信 iLink、企业微信、钉钉、飞书、Telegram、Slack、Discord、QQ。详细配置步骤见 [机器人使用说明](robot.md)。
-
 ## 配置修改建议
 
 - 先在测试环境验证模型、MCP、知识库和高风险工具。
@@ -255,7 +251,6 @@ project:
 | `hitl.tool_whitelist` | 新工具调用审批判断生效 | 已挂起审批不自动重判 |
 | `knowledge.enabled` | 会尝试初始化/更新组件 | 启用后仍需扫描和索引 |
 | `knowledge.embedding` | 检索器/索引器配置更新 | 已有向量通常需要重建索引 |
-| `robots` | 会触发连接重启 | 平台回调配置仍需在平台侧正确 |
 | `c2.enabled` | 会协调 C2 runtime | 已暴露端口和会话要人工确认 |
 | `server.port/tls` | 通常需要重启进程 | 监听地址不是普通热更新 |
 

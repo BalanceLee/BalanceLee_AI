@@ -6311,6 +6311,17 @@ func (h *OpenAPIHandler) GetOpenAPISpec(c *gin.Context) {
 		},
 	}
 
+	// Keep legacy runtime routes available, but omit retired platform-management
+	// endpoints from the public API reference.
+	if paths, ok := spec["paths"].(map[string]interface{}); ok {
+		for _, path := range []string{
+			"/api/roles", "/api/roles/{name}",
+			"/api/robot/wecom", "/api/robot/dingtalk", "/api/robot/lark", "/api/robot/test",
+		} {
+			delete(paths, path)
+		}
+	}
+
 	enrichSpecWithI18nKeys(spec)
 	c.JSON(http.StatusOK, spec)
 }

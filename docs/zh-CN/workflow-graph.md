@@ -1,6 +1,5 @@
 # BalanceLeeAI 工作流使用说明
 
-[English](../en-US/workflow-graph.md)
 
 本文档说明 **工作流（Workflow）** 的完整使用方式：如何在画布上搭建流程、配置各类型节点、在节点之间传递数据，以及如何将流程绑定到角色并自动运行。
 
