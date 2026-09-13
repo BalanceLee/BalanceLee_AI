@@ -84,19 +84,21 @@ func (h *AgentHandler) persistFinalizationDecision(
 	mcpExecutionIDs []string,
 	reasoningContent string,
 	decision agentfinalizer.Decision,
-) {
+) *beliefpath.RunSummary {
 	if assistantMessageID == "" || h.db == nil {
-		return
+		return nil
 	}
 	_ = h.db.AddProcessDetail(assistantMessageID, conversationID, "finalization_check", finalizationCheckMessage(decision), decision)
-	h.observeBeliefPathFinalization(conversationID, decision)
+	summary := h.observeBeliefPathFinalization(conversationID, assistantMessageID, decision)
+	h.persistBeliefPathSummary(assistantMessageID, conversationID, summary)
 	if decision.Finalizable {
 		if err := h.db.UpdateAssistantMessageFinalize(assistantMessageID, decision.FinalText, mcpExecutionIDs, reasoningContent); err != nil && h.logger != nil {
 			h.logger.Warn("更新最终助手消息失败", zap.Error(err), zap.String("conversationId", conversationID), zap.String("agentMode", agentMode))
 		}
-		return
+		return summary
 	}
 	_, _ = h.db.Exec("UPDATE messages SET content = ?, updated_at = ? WHERE id = ?", finalizationBlockedMessage(decision), time.Now(), assistantMessageID)
+	return summary
 }
 
 func (h *AgentHandler) finalizeCandidateForDelivery(
@@ -134,7 +136,8 @@ func (h *AgentHandler) finalizeCandidateForDeliveryWithPolicy(
 		return decision
 	}
 	_ = h.db.AddProcessDetail(assistantMessageID, conversationID, "finalization_check", finalizationCheckMessage(decision), decision)
-	h.observeBeliefPathFinalization(conversationID, decision)
+	summary := h.observeBeliefPathFinalization(conversationID, assistantMessageID, decision)
+	h.persistBeliefPathSummary(assistantMessageID, conversationID, summary)
 	if decision.Finalizable {
 		if err := h.db.UpdateAssistantMessageFinalize(assistantMessageID, decision.FinalText, mcpExecutionIDs, reasoningContent); err != nil && h.logger != nil {
 			h.logger.Warn("更新最终助手消息失败", zap.Error(err), zap.String("conversationId", conversationID), zap.String("agentMode", agentMode))
@@ -147,13 +150,15 @@ func (h *AgentHandler) finalizeCandidateForDeliveryWithPolicy(
 
 func (h *AgentHandler) observeBeliefPathFinalization(
 	conversationID string,
+	assistantMessageID string,
 	decision agentfinalizer.Decision,
-) {
+) *beliefpath.RunSummary {
 	if h == nil || h.beliefPath == nil {
-		return
+		return nil
 	}
 	if err := h.beliefPath.Finalize(context.Background(), beliefpath.TerminalEvidence{
 		ConversationID: conversationID,
+		MessageID:      assistantMessageID,
 		Status:         decision.Status,
 		Verified:       decision.Finalizable && decision.EvidenceVerified,
 		EvidenceRefs:   append([]string(nil), decision.EvidenceRefs...),
@@ -162,6 +167,48 @@ func (h *AgentHandler) observeBeliefPathFinalization(
 		h.logger.Warn("BeliefPath 处理终态证据失败",
 			zap.Error(err),
 			zap.String("conversationId", conversationID))
+		return nil
+	}
+	summary, err := h.beliefPath.BuildSummary(context.Background(), conversationID, assistantMessageID)
+	if err != nil {
+		if h.logger != nil {
+			h.logger.Warn("BeliefPath 汇总运行数据失败",
+				zap.Error(err),
+				zap.String("conversationId", conversationID),
+				zap.String("messageId", assistantMessageID))
+		}
+		return nil
+	}
+	return summary
+}
+
+func (h *AgentHandler) persistBeliefPathSummary(
+	assistantMessageID, conversationID string,
+	summary *beliefpath.RunSummary,
+) {
+	if h == nil || h.db == nil || summary == nil || !summary.Available {
+		return
+	}
+	var detailID string
+	err := h.db.QueryRow(`SELECT id FROM process_details
+WHERE message_id=? AND event_type='beliefpath_summary'
+ORDER BY created_at DESC, rowid DESC LIMIT 1`, assistantMessageID).Scan(&detailID)
+	if err == nil && strings.TrimSpace(detailID) != "" {
+		if updateErr := h.db.UpdateProcessDetailContent(detailID, summary.Message(), summary); updateErr == nil {
+			return
+		}
+	}
+	if addErr := h.db.AddProcessDetail(
+		assistantMessageID,
+		conversationID,
+		"beliefpath_summary",
+		summary.Message(),
+		summary,
+	); addErr != nil && h.logger != nil {
+		h.logger.Warn("保存 BeliefPath 执行摘要失败",
+			zap.Error(addErr),
+			zap.String("conversationId", conversationID),
+			zap.String("messageId", assistantMessageID))
 	}
 }
 

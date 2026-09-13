@@ -7720,6 +7720,128 @@ html[data-theme="dark"] .login-card .login-submit:disabled {
     background: rgba(20, 184, 166, 0.07);
 }
 
+.timeline-item-beliefpath_summary {
+    border-left-color: #0f766e;
+    background: rgba(15, 118, 110, 0.07);
+}
+
+.timeline-item-beliefpath_summary .timeline-item-title {
+    color: #0f766e;
+    font-weight: 650;
+}
+
+.beliefpath-summary {
+    display: grid;
+    gap: 10px;
+}
+
+.beliefpath-summary-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.beliefpath-summary-mode,
+.beliefpath-summary-state {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.beliefpath-summary-state {
+    color: #047857;
+    font-weight: 650;
+    text-transform: uppercase;
+}
+
+.beliefpath-summary-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.beliefpath-summary-metrics > span {
+    display: grid;
+    min-width: 0;
+    padding: 8px 10px;
+}
+
+.beliefpath-summary-metrics b {
+    overflow-wrap: anywhere;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 650;
+}
+
+.beliefpath-summary-metrics small {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.beliefpath-summary-details summary {
+    width: fit-content;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.beliefpath-summary-details dl {
+    display: grid;
+    grid-template-columns: minmax(88px, 0.22fr) minmax(0, 1fr);
+    gap: 7px 12px;
+    margin: 10px 0 0;
+    font-size: 12px;
+}
+
+.beliefpath-summary-details dt {
+    color: var(--text-muted);
+}
+
+.beliefpath-summary-details dd {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--text-secondary);
+}
+
+.beliefpath-summary-slate code,
+.beliefpath-summary-tool code {
+    margin-right: 5px;
+}
+
+.beliefpath-summary-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px 10px;
+}
+
+.beliefpath-summary-tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.beliefpath-summary-list {
+    margin: 0;
+    padding-left: 17px;
+}
+
+.beliefpath-summary-list li + li {
+    margin-top: 4px;
+}
+
+.beliefpath-summary-list small {
+    display: block;
+    color: var(--text-muted);
+}
+
+.beliefpath-summary-empty {
+    color: var(--text-muted);
+}
+
 .timeline-item-warning {
     border-left-color: #f57c00;
     background: rgba(245, 124, 0, 0.09);
@@ -34843,6 +34965,16 @@ html[data-theme="dark"] .timeline-item-progress {
 html[data-theme="dark"] .timeline-item-eino_usage_summary {
     border-left-color: #2dd4bf;
     background: rgba(45, 212, 191, 0.085);
+}
+
+html[data-theme="dark"] .timeline-item-beliefpath_summary {
+    border-left-color: #2dd4bf;
+    background: rgba(45, 212, 191, 0.085);
+}
+
+html[data-theme="dark"] .timeline-item-beliefpath_summary .timeline-item-title,
+html[data-theme="dark"] .beliefpath-summary-state {
+    color: #5eead4;
 }
 
 html[data-theme="dark"] .timeline-item-eino_agent_reply {

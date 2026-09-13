@@ -2938,6 +2938,7 @@ const LIVE_ATTACK_CHAIN_REFRESH_EVENTS = new Set([
     'beliefpath_decision',
     'beliefpath_gate_allowed',
     'beliefpath_gate_blocked',
+    'beliefpath_summary',
     'knowledge_retrieval',
     'response_start',
     'response',
@@ -3422,6 +3423,10 @@ function handleStreamEvent(event, progressElement, progressId,
             break;
 
         case 'beliefpath_gate_allowed':
+            break;
+
+        case 'beliefpath_summary':
+            renderBeliefPathSummaryTimeline(timeline, event.data || {}, event.createdAt);
             break;
 
         case 'warning':
@@ -4113,6 +4118,9 @@ function handleStreamEvent(event, progressElement, progressId,
                 updateAssistantBubbleContent(assistantIdFinal, bubbleText, true);
             }
             markAssistantFinalizationState(assistantIdFinal, responseData);
+            if (timeline && responseData.beliefpathSummary) {
+                renderBeliefPathSummaryTimeline(timeline, responseData.beliefpathSummary);
+            }
 
             // 将 response_start/response_delta 占位固化为 planning，与后端落库一致后再快照过程详情
             if (streamState && streamState.itemId) {
@@ -6625,6 +6633,115 @@ function buildWorkflowBranchDetailHtml(data) {
     </div>`;
 }
 
+function beliefPathSummaryNumber(value) {
+    const number = Number(value || 0);
+    if (!Number.isFinite(number)) return '0';
+    return Math.max(0, Math.round(number)).toLocaleString();
+}
+
+function beliefPathSummaryDuration(value) {
+    const milliseconds = Number(value || 0);
+    if (!Number.isFinite(milliseconds) || milliseconds <= 0) return '-';
+    if (milliseconds < 1000) return Math.round(milliseconds) + ' ms';
+    const seconds = milliseconds / 1000;
+    if (seconds < 60) return seconds.toFixed(seconds < 10 ? 2 : 1) + ' s';
+    const minutes = Math.floor(seconds / 60);
+    return minutes + 'm ' + Math.round(seconds % 60) + 's';
+}
+
+function beliefPathBranchReason(reason) {
+    const labels = {
+        repeated_no_progress: '重复执行未产生新证据',
+        dominated_confidence_bound: '收益上界低于当前最佳分支',
+        infrastructure_error: '基础设施异常，等待冷却',
+        tool_unavailable: '工具暂不可用',
+        cooldown_elapsed: '冷却结束后重新开放',
+        all_alternatives_unavailable: '其他候选不可用，恢复探索'
+    };
+    const key = String(reason || '').trim();
+    return labels[key] || key;
+}
+
+function buildBeliefPathBranchList(items, emptyText) {
+    if (!Array.isArray(items) || items.length === 0) {
+        return `<span class="beliefpath-summary-empty">${escapeHtml(emptyText)}</span>`;
+    }
+    return `<ul class="beliefpath-summary-list">${items.map(function (item) {
+        const label = String(item && item.label || '未命名分支');
+        const state = String(item && item.state || '');
+        const reason = beliefPathBranchReason(item && item.reason);
+        const count = Number(item && (item.prune_count || item.reopen_count) || 0);
+        const meta = [state, reason, count > 0 ? ('×' + count) : ''].filter(Boolean).join(' · ');
+        return `<li><span>${escapeHtml(label)}</span>${meta ? `<small>${escapeHtml(meta)}</small>` : ''}</li>`;
+    }).join('')}</ul>`;
+}
+
+function buildBeliefPathSummaryHtml(data) {
+    const d = data && typeof data === 'object' ? data : {};
+    const mode = String(d.mode || 'off');
+    const variant = String(d.variant || 'full');
+    const status = String(d.status || 'active');
+    const selectedIntents = Array.isArray(d.selected_intents) ? d.selected_intents : [];
+    const toolSlate = Array.isArray(d.current_tool_slate) ? d.current_tool_slate : [];
+    const toolCounts = Array.isArray(d.tool_counts) ? d.tool_counts : [];
+    const pruned = Array.isArray(d.pruned_branches) ? d.pruned_branches : [];
+    const reopened = Array.isArray(d.reopened_branches) ? d.reopened_branches : [];
+    const toolRows = toolCounts.length
+        ? toolCounts.map(function (item) {
+            return `<span class="beliefpath-summary-tool"><code>${escapeHtml(String(item.name || 'unknown'))}</code><b>${beliefPathSummaryNumber(item.count)}</b></span>`;
+        }).join('')
+        : '<span class="beliefpath-summary-empty">无工具调用</span>';
+    const intentPath = selectedIntents.length
+        ? selectedIntents.map(value => escapeHtml(String(value))).join('<span aria-hidden="true"> → </span>')
+        : '暂无决策';
+    const slate = toolSlate.length
+        ? toolSlate.map(value => `<code>${escapeHtml(String(value))}</code>`).join(' ')
+        : '<span class="beliefpath-summary-empty">无候选工具</span>';
+
+    return `<div class="timeline-item-content beliefpath-summary">
+        <div class="beliefpath-summary-status">
+            <span class="beliefpath-summary-mode">${escapeHtml(mode)} / ${escapeHtml(variant)}</span>
+            <span class="beliefpath-summary-state">${escapeHtml(status)}</span>
+        </div>
+        <div class="beliefpath-summary-metrics">
+            <span><b>${beliefPathSummaryNumber(d.decision_count)}</b><small>决策</small></span>
+            <span><b>${beliefPathSummaryNumber(d.tool_calls)}</b><small>工具调用</small></span>
+            <span><b>${beliefPathSummaryNumber(d.total_tokens)}</b><small>Token</small></span>
+            <span><b>${beliefPathSummaryDuration(d.elapsed_ms)}</b><small>耗时</small></span>
+            <span><b>${beliefPathSummaryNumber(d.gate_blocked)}</b><small>拦截</small></span>
+            <span><b>${beliefPathSummaryNumber(d.credit_count)}</b><small>有效证据</small></span>
+        </div>
+        <details class="beliefpath-summary-details">
+            <summary>决策与分支</summary>
+            <dl>
+                <dt>Intent 路径</dt><dd>${intentPath}</dd>
+                <dt>当前 Intent</dt><dd>${escapeHtml(String(d.current_intent || '-'))}</dd>
+                <dt>当前候选工具</dt><dd class="beliefpath-summary-slate">${slate}</dd>
+                <dt>工具分布</dt><dd class="beliefpath-summary-tools">${toolRows}</dd>
+                <dt>已剪枝/冷却</dt><dd>${buildBeliefPathBranchList(pruned, '无')}</dd>
+                <dt>已重新开放</dt><dd>${buildBeliefPathBranchList(reopened, '无')}</dd>
+                <dt>图规模</dt><dd>${beliefPathSummaryNumber(d.node_count)} 节点 · ${beliefPathSummaryNumber(d.edge_count)} 边 · ${beliefPathSummaryNumber(d.hyperedge_count)} AND/OR</dd>
+                <dt>Token 明细</dt><dd>输入 ${beliefPathSummaryNumber(d.prompt_tokens)} · 输出 ${beliefPathSummaryNumber(d.completion_tokens)}</dd>
+            </dl>
+        </details>
+    </div>`;
+}
+
+function renderBeliefPathSummaryTimeline(timeline, data, createdAt) {
+    if (!timeline || !data || data.available === false) return '';
+    const existing = timeline.querySelector('.timeline-item-beliefpath_summary');
+    if (existing) existing.remove();
+    return addTimelineItem(timeline, 'beliefpath_summary', {
+        title: typeof window.t === 'function'
+            ? window.t('chat.beliefPathSummaryTitle')
+            : 'BeliefPath 执行摘要',
+        message: '',
+        data: data,
+        createdAt: createdAt,
+        expanded: false
+    });
+}
+
 function isLiveProgressTimeline(timeline) {
     return !!(timeline && timeline.id && /^progress-\d+-\d+-timeline$/.test(timeline.id));
 }
@@ -6802,6 +6919,9 @@ function addTimelineItem(timeline, type, options) {
             }
         });
     }
+    if (type === 'beliefpath_summary') {
+        item.dataset.beliefpathSummary = '1';
+    }
     if (options.data && options.data.einoAgent != null && String(options.data.einoAgent).trim() !== '') {
         item.dataset.einoAgent = String(options.data.einoAgent).trim();
     }
@@ -6947,6 +7067,8 @@ function addTimelineItem(timeline, type, options) {
             ? formatTimelineStreamBody(options.message, options.data)
             : options.message;
         content += `<div class="timeline-item-content timeline-stream-plain">${formatTimelinePlainTextHtml(streamBody)}</div>`;
+    } else if (type === 'beliefpath_summary' && options.data) {
+        content += buildBeliefPathSummaryHtml(options.data);
     } else if (type === 'eino_usage_summary' && options.message) {
         content += `<div class="timeline-item-content timeline-stream-plain timeline-usage-summary">${formatTimelinePlainTextHtml(options.message)}</div>`;
     } else if (type === 'progress' && options.message) {

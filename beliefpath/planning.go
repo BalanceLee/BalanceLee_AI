@@ -2,6 +2,7 @@ package beliefpath
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"math/rand"
 	"sort"
@@ -224,6 +225,9 @@ func intentFromNode(node Node) Intent {
 		intent.ExpectedEvidence = stringSliceValue(node.Metadata["expected_evidence"])
 		intent.Capabilities = stringSliceValue(node.Metadata["capabilities"])
 		intent.Prerequisites = stringSliceValue(node.Metadata["prerequisites"])
+		intent.StateReason = stringValue(node.Metadata["state_reason"])
+		intent.PruneCount = int64Value(node.Metadata["prune_count"])
+		intent.ReopenCount = int64Value(node.Metadata["reopen_count"])
 	}
 	return intent
 }
@@ -252,6 +256,9 @@ func nodeFromIntent(conversationID string, intent Intent) Node {
 			"prerequisites":     intent.Prerequisites,
 			"expected_evidence": intent.ExpectedEvidence,
 			"capabilities":      intent.Capabilities,
+			"state_reason":      intent.StateReason,
+			"prune_count":       intent.PruneCount,
+			"reopen_count":      intent.ReopenCount,
 		},
 	}
 }
@@ -298,7 +305,9 @@ func scoreIntents(cfg Config, intents []Intent, revision int64) []CandidateScore
 			Risk:            risk,
 			RepeatPenalty:   repeatPenalty,
 			State:           state,
-			Reason:          reason,
+			Reason:          fallbackString(intent.StateReason, reason),
+			PruneCount:      intent.PruneCount,
+			ReopenCount:     intent.ReopenCount,
 		})
 	}
 	if cfg.UsesPUCT() {
@@ -562,5 +571,21 @@ func stringSliceValue(value interface{}) []string {
 		return out
 	default:
 		return nil
+	}
+}
+
+func int64Value(value interface{}) int64 {
+	switch typed := value.(type) {
+	case int:
+		return int64(typed)
+	case int64:
+		return typed
+	case float64:
+		return int64(typed)
+	case json.Number:
+		result, _ := typed.Int64()
+		return result
+	default:
+		return 0
 	}
 }

@@ -685,6 +685,7 @@
     "einoModelRetryTitle": "🔁 模型调用重试",
     "einoModelFailoverTitle": "🔀 切换备用模型",
     "einoUsageSummaryTitle": "Token 用量汇总",
+    "beliefPathSummaryTitle": "BeliefPath 执行摘要",
     "einoUsageModelCalls": "模型调用",
     "einoUsagePromptTokens": "输入 tokens",
     "einoUsageCompletionTokens": "输出 tokens",

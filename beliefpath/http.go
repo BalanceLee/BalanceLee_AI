@@ -51,6 +51,27 @@ func RegisterRoutes(group *gin.RouterGroup, service *Service) {
 		}
 		c.JSON(http.StatusOK, snapshot)
 	})
+	group.GET("/beliefpath/:conversationId/summary", func(c *gin.Context) {
+		conversationID := strings.TrimSpace(c.Param("conversationId"))
+		if conversationID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "conversationId is required"})
+			return
+		}
+		summary, err := service.BuildSummary(
+			c.Request.Context(),
+			conversationID,
+			strings.TrimSpace(c.Query("messageId")),
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if summary == nil {
+			c.JSON(http.StatusOK, gin.H{"available": false})
+			return
+		}
+		c.JSON(http.StatusOK, summary)
+	})
 	group.DELETE("/beliefpath/:conversationId", func(c *gin.Context) {
 		conversationID := strings.TrimSpace(c.Param("conversationId"))
 		if conversationID == "" {

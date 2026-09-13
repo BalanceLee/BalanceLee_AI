@@ -397,7 +397,7 @@ func (h *AgentHandler) EinoSingleAgentLoopStream(c *gin.Context) {
 			decision = h.decideAgentRunForDeliveryWithPolicy(conversationID, assistantMessageID, "eino_single", result, cumulativeMCPExecutionIDs, requestRequiresExecutionEvidence(&req))
 		}
 	}
-	h.persistFinalizationDecision(conversationID, assistantMessageID, "eino_single", cumulativeMCPExecutionIDs, multiagent.AggregatedReasoningFromTraceJSON(result.LastAgentTraceInput), decision)
+	beliefPathSummary := h.persistFinalizationDecision(conversationID, assistantMessageID, "eino_single", cumulativeMCPExecutionIDs, multiagent.AggregatedReasoningFromTraceJSON(result.LastAgentTraceInput), decision)
 
 	if result.LastAgentTraceInput != "" || result.LastAgentTraceOutput != "" {
 		if err := h.db.SaveAgentTrace(conversationID, result.LastAgentTraceInput, result.LastAgentTraceOutput); err != nil {
@@ -412,11 +412,15 @@ func (h *AgentHandler) EinoSingleAgentLoopStream(c *gin.Context) {
 		taskStatus = decision.Status
 		h.tasks.UpdateTaskStatus(conversationID, taskStatus)
 	}
+	if beliefPathSummary != nil {
+		sendEvent("beliefpath_summary", beliefPathSummary.Message(), beliefPathSummary)
+	}
 	sendEvent("response", responseText, finalizationResponsePayload(decision, map[string]interface{}{
 		"mcpExecutionIds":                  cumulativeMCPExecutionIDs,
 		"conversationId":                   conversationID,
 		"messageId":                        assistantMessageID,
 		"agentMode":                        "eino_single",
+		"beliefpathSummary":                beliefPathSummary,
 		"autoCancelledPendingExecutionIds": autoCancelledPendingExecutionIDs,
 	}))
 	sendEvent("done", "", map[string]interface{}{"conversationId": conversationID})
@@ -517,7 +521,7 @@ func (h *AgentHandler) EinoSingleAgentLoop(c *gin.Context) {
 		break
 	}
 
-	h.persistFinalizationDecision(prep.ConversationID, prep.AssistantMessageID, "eino_single", result.MCPExecutionIDs, multiagent.AggregatedReasoningFromTraceJSON(result.LastAgentTraceInput), decision)
+	beliefPathSummary := h.persistFinalizationDecision(prep.ConversationID, prep.AssistantMessageID, "eino_single", result.MCPExecutionIDs, multiagent.AggregatedReasoningFromTraceJSON(result.LastAgentTraceInput), decision)
 	if result.LastAgentTraceInput != "" || result.LastAgentTraceOutput != "" {
 		_ = h.db.SaveAgentTrace(prep.ConversationID, result.LastAgentTraceInput, result.LastAgentTraceOutput)
 	}
@@ -540,6 +544,7 @@ func (h *AgentHandler) EinoSingleAgentLoop(c *gin.Context) {
 		"evidenceRefs":                     decision.EvidenceRefs,
 		"pendingExecutionIds":              decision.PendingExecutionIDs,
 		"missingChecks":                    decision.MissingChecks,
+		"beliefpathSummary":                beliefPathSummary,
 		"autoCancelledPendingExecutionIds": autoCancelledPendingExecutionIDs,
 	})
 }

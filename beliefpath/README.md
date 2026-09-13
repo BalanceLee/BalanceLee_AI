@@ -39,8 +39,14 @@ Authenticated inspection endpoints:
 
 - `GET /api/beliefpath/status`
 - `GET /api/beliefpath/:conversationId/snapshot`
+- `GET /api/beliefpath/:conversationId/summary?messageId=<assistant-message-id>`
 - `DELETE /api/beliefpath/:conversationId`
 - `DELETE /api/beliefpath/learning`
+
+When the planner is active, finalization persists a `beliefpath_summary`
+process-detail event. The summary is generated from planner tables,
+`process_details`, tool executions, and model token usage rather than from LLM
+text, so it can be rendered live and restored after a page refresh.
 
 The planner treats deterministic parser output and verified terminal evidence
 as facts. LLM text and ambiguous tool output remain hypotheses. Policy denial,

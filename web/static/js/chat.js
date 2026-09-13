@@ -4380,6 +4380,10 @@ function renderProcessDetails(messageId, processDetails, options) {
             } else {
                 itemTitle = agPx + '📝 ' + (typeof window.t === 'function' ? window.t('chat.planning') : '规划中');
             }
+        } else if (eventType === 'beliefpath_summary') {
+            itemTitle = typeof window.t === 'function'
+                ? window.t('chat.beliefPathSummaryTitle')
+                : 'BeliefPath 执行摘要';
         } else if (eventType === 'tool_calls_detected') {
             itemTitle = agPx + '🔧 ' + (typeof window.t === 'function' ? window.t('chat.toolCallsDetected', { count: data.count || 0 }) : '检测到 ' + (data.count || 0) + ' 个工具调用');
         } else if (eventType === 'tool_call') {

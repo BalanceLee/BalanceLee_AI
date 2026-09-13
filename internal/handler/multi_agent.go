@@ -411,7 +411,7 @@ func (h *AgentHandler) MultiAgentLoopStream(c *gin.Context) {
 			decision = h.decideAgentRunForDeliveryWithPolicy(conversationID, assistantMessageID, agentMode, result, cumulativeMCPExecutionIDs, requestRequiresExecutionEvidence(&req))
 		}
 	}
-	h.persistFinalizationDecision(conversationID, assistantMessageID, agentMode, cumulativeMCPExecutionIDs, multiagent.AggregatedReasoningFromTraceJSON(result.LastAgentTraceInput), decision)
+	beliefPathSummary := h.persistFinalizationDecision(conversationID, assistantMessageID, agentMode, cumulativeMCPExecutionIDs, multiagent.AggregatedReasoningFromTraceJSON(result.LastAgentTraceInput), decision)
 
 	if result.LastAgentTraceInput != "" || result.LastAgentTraceOutput != "" {
 		if err := h.db.SaveAgentTrace(conversationID, result.LastAgentTraceInput, result.LastAgentTraceOutput); err != nil {
@@ -426,11 +426,15 @@ func (h *AgentHandler) MultiAgentLoopStream(c *gin.Context) {
 		taskStatus = decision.Status
 		h.tasks.UpdateTaskStatus(conversationID, taskStatus)
 	}
+	if beliefPathSummary != nil {
+		sendEvent("beliefpath_summary", beliefPathSummary.Message(), beliefPathSummary)
+	}
 	sendEvent("response", responseText, finalizationResponsePayload(decision, map[string]interface{}{
 		"mcpExecutionIds":                  cumulativeMCPExecutionIDs,
 		"conversationId":                   conversationID,
 		"messageId":                        assistantMessageID,
 		"agentMode":                        agentMode,
+		"beliefpathSummary":                beliefPathSummary,
 		"autoCancelledPendingExecutionIds": autoCancelledPendingExecutionIDs,
 	}))
 	sendEvent("done", "", map[string]interface{}{"conversationId": conversationID})
@@ -541,7 +545,7 @@ func (h *AgentHandler) MultiAgentLoop(c *gin.Context) {
 		break
 	}
 
-	h.persistFinalizationDecision(prep.ConversationID, prep.AssistantMessageID, agentMode, result.MCPExecutionIDs, multiagent.AggregatedReasoningFromTraceJSON(result.LastAgentTraceInput), decision)
+	beliefPathSummary := h.persistFinalizationDecision(prep.ConversationID, prep.AssistantMessageID, agentMode, result.MCPExecutionIDs, multiagent.AggregatedReasoningFromTraceJSON(result.LastAgentTraceInput), decision)
 
 	if result.LastAgentTraceInput != "" || result.LastAgentTraceOutput != "" {
 		if err := h.db.SaveAgentTrace(prep.ConversationID, result.LastAgentTraceInput, result.LastAgentTraceOutput); err != nil {
@@ -567,6 +571,7 @@ func (h *AgentHandler) MultiAgentLoop(c *gin.Context) {
 		PendingExecutionIDs:              decision.PendingExecutionIDs,
 		MissingChecks:                    decision.MissingChecks,
 		AutoCancelledPendingExecutionIDs: autoCancelledPendingExecutionIDs,
+		BeliefPathSummary:                beliefPathSummary,
 	})
 }
 

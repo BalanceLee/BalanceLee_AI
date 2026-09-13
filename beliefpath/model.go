@@ -114,6 +114,9 @@ type Intent struct {
 	Visits           int64    `json:"visits"`
 	RepeatCount      int64    `json:"repeat_count"`
 	CooldownUntil    int64    `json:"cooldown_until_revision"`
+	StateReason      string   `json:"state_reason,omitempty"`
+	PruneCount       int64    `json:"prune_count,omitempty"`
+	ReopenCount      int64    `json:"reopen_count,omitempty"`
 }
 
 type CandidateScore struct {
@@ -129,6 +132,8 @@ type CandidateScore struct {
 	RepeatPenalty   float64 `json:"repeat_penalty"`
 	State           string  `json:"state"`
 	Reason          string  `json:"reason,omitempty"`
+	PruneCount      int64   `json:"prune_count,omitempty"`
+	ReopenCount     int64   `json:"reopen_count,omitempty"`
 }
 
 type ToolScore struct {
@@ -180,6 +185,7 @@ type GateDecision struct {
 
 type TerminalEvidence struct {
 	ConversationID string
+	MessageID      string
 	RunID          string
 	Status         string
 	Verified       bool

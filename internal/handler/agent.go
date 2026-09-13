@@ -738,19 +738,20 @@ func (h *AgentHandler) mergeAssistantMessagePartialOnCancel(messageID, partial s
 
 // ChatResponse 聊天响应
 type ChatResponse struct {
-	Response                         string    `json:"response"`
-	MCPExecutionIDs                  []string  `json:"mcpExecutionIds,omitempty"` // 本次对话中执行的MCP调用ID列表
-	ConversationID                   string    `json:"conversationId"`            // 对话ID
-	Time                             time.Time `json:"time"`
-	Finalizable                      bool      `json:"finalizable"`
-	Finalized                        bool      `json:"finalized"`
-	Status                           string    `json:"status,omitempty"`
-	CompletionReason                 string    `json:"completionReason,omitempty"`
-	EvidenceVerified                 bool      `json:"evidenceVerified"`
-	EvidenceRefs                     []string  `json:"evidenceRefs,omitempty"`
-	PendingExecutionIDs              []string  `json:"pendingExecutionIds,omitempty"`
-	MissingChecks                    []string  `json:"missingChecks,omitempty"`
-	AutoCancelledPendingExecutionIDs []string  `json:"autoCancelledPendingExecutionIds,omitempty"`
+	Response                         string                 `json:"response"`
+	MCPExecutionIDs                  []string               `json:"mcpExecutionIds,omitempty"` // 本次对话中执行的MCP调用ID列表
+	ConversationID                   string                 `json:"conversationId"`            // 对话ID
+	Time                             time.Time              `json:"time"`
+	Finalizable                      bool                   `json:"finalizable"`
+	Finalized                        bool                   `json:"finalized"`
+	Status                           string                 `json:"status,omitempty"`
+	CompletionReason                 string                 `json:"completionReason,omitempty"`
+	EvidenceVerified                 bool                   `json:"evidenceVerified"`
+	EvidenceRefs                     []string               `json:"evidenceRefs,omitempty"`
+	PendingExecutionIDs              []string               `json:"pendingExecutionIds,omitempty"`
+	MissingChecks                    []string               `json:"missingChecks,omitempty"`
+	AutoCancelledPendingExecutionIDs []string               `json:"autoCancelledPendingExecutionIds,omitempty"`
+	BeliefPathSummary                *beliefpath.RunSummary `json:"beliefpathSummary,omitempty"`
 }
 
 func (h *AgentHandler) finalizeRobotAgentError(ctx context.Context, assistantMessageID, conversationID string, resultMA *multiagent.RunResult, errMA error) (string, string, error) {

@@ -422,8 +422,15 @@ func (s *Service) Finalize(ctx context.Context, evidence TerminalEvidence) error
 	if !s.Active() || strings.TrimSpace(evidence.ConversationID) == "" {
 		return nil
 	}
+	if strings.TrimSpace(evidence.RunID) == "" {
+		_ = s.store.db.QueryRowContext(ctx,
+			`SELECT run_id FROM beliefpath_runs WHERE conversation_id=?`,
+			evidence.ConversationID,
+		).Scan(&evidence.RunID)
+	}
 	event := Event{
 		ConversationID: evidence.ConversationID,
+		MessageID:      evidence.MessageID,
 		RunID:          evidence.RunID,
 		SourceEventID: stableID(
 			"terminal",
@@ -759,8 +766,10 @@ func (s *Service) updateIntentFromOutcome(
 		intent.RepeatCount = 0
 		if intentSatisfied(intent, observation) {
 			intent.State = StateSolved
+			intent.StateReason = "expected_evidence_observed"
 		} else {
 			intent.State = StateActive
+			intent.StateReason = ""
 		}
 	case OutcomeNegative, OutcomeNoProgress:
 		intent.Beta++
@@ -771,6 +780,7 @@ func (s *Service) updateIntentFromOutcome(
 		}
 	case OutcomeInfrastructure, OutcomeToolUnavailable:
 		intent.State = StateCooling
+		intent.StateReason = observation.Outcome
 		intent.CooldownUntil = revision + cfg.CooldownRevisions
 	case OutcomeInvalidArgs:
 		// Argument generation failure is execution credit, not evidence that
@@ -783,7 +793,11 @@ func (s *Service) updateIntentFromOutcome(
 		intent.RepeatCount >= int64(cfg.RepeatLimit) &&
 		intent.Visits >= int64(cfg.MinEvidenceAttempts) &&
 		posteriorMean(intent.Alpha, intent.Beta) < 0.35 {
+		if intent.State != StateSuspended {
+			intent.PruneCount++
+		}
 		intent.State = StateSuspended
+		intent.StateReason = "repeated_no_progress"
 		intent.CooldownUntil = revision + cfg.CooldownRevisions
 	}
 	if err := upsertNodeTx(ctx, tx, nodeFromIntent(observation.ConversationID, intent)); err != nil {
@@ -1072,6 +1086,8 @@ func applyBranchLifecycle(cfg Config, intents []Intent, revision int64) []Intent
 			revision >= intent.CooldownUntil {
 			intent.State = StateActive
 			intent.RepeatCount = 0
+			intent.ReopenCount++
+			intent.StateReason = "cooldown_elapsed"
 		}
 		if cfg.UsesPruning() &&
 			intent.State == StateActive &&
@@ -1079,7 +1095,9 @@ func applyBranchLifecycle(cfg Config, intents []Intent, revision int64) []Intent
 			!math.IsInf(bestLowerBound, -1) {
 			_, upper := posteriorBounds(intent.Alpha, intent.Beta)
 			if upper < bestLowerBound-cfg.SoftPruneMargin {
+				intent.PruneCount++
 				intent.State = StateSuspended
+				intent.StateReason = "dominated_confidence_bound"
 				intent.CooldownUntil = revision + cfg.CooldownRevisions
 			}
 		}
@@ -1105,6 +1123,8 @@ func applyBranchLifecycle(cfg Config, intents []Intent, revision int64) []Intent
 	if bestIndex >= 0 {
 		intents[bestIndex].State = StateActive
 		intents[bestIndex].RepeatCount = 0
+		intents[bestIndex].ReopenCount++
+		intents[bestIndex].StateReason = "all_alternatives_unavailable"
 	}
 	return intents
 }
