@@ -7310,6 +7310,8 @@ function renderAttackChain(chainData) {
         const riskScore = node.risk_score || 0;
         const nodeType = node.type || '';
         const metadata = node.metadata || {};
+        const plannerKind = String(metadata.planner_kind || '').toLowerCase();
+        const plannerState = String(metadata.planner_state || '').toLowerCase();
 
         // 统一的主题系统（与导出一致）
         let typeLabel = '节点';
@@ -7337,7 +7339,39 @@ function renderAttackChain(chainData) {
             const findings = metadata.findings || [];
             const hasFindings = Array.isArray(findings) && findings.length > 0;
             const isFailedInsight = (metadata.status || '') === 'failed_insight';
-            if (stage === 'analysis') {
+            if (plannerKind === 'hyperedge') {
+                typeLabel = String(metadata.hyper_kind || 'AND/OR');
+                typeEn = 'LOGIC';
+                typeColor = '#164E63';
+                accentColor = '#0891B2';
+                accentDark = '#0E7490';
+                bgGradientStart = '#FFFFFF';
+                bgGradientEnd = '#ECFEFF';
+            } else if (plannerKind === 'intent') {
+                typeLabel = '意图';
+                typeEn = 'INTENT';
+                if (plannerState === 'solved') {
+                    typeColor = '#064E3B';
+                    accentColor = '#10B981';
+                    accentDark = '#047857';
+                    bgGradientEnd = '#ECFDF5';
+                } else if (plannerState === 'suspended' || plannerState === 'cooling') {
+                    typeColor = '#713F12';
+                    accentColor = '#CA8A04';
+                    accentDark = '#A16207';
+                    bgGradientEnd = '#FEFCE8';
+                } else if (plannerState === 'pruned_hard' || plannerState === 'blocked_policy') {
+                    typeColor = '#7F1D1D';
+                    accentColor = '#EF4444';
+                    accentDark = '#B91C1C';
+                    bgGradientEnd = '#FEF2F2';
+                } else {
+                    typeColor = '#164E63';
+                    accentColor = '#0891B2';
+                    accentDark = '#0E7490';
+                    bgGradientEnd = '#ECFEFF';
+                }
+            } else if (stage === 'analysis') {
                 typeLabel = '分析';
                 typeEn = 'ANALYZE';
                 typeColor = '#312E81';
@@ -7383,6 +7417,15 @@ function renderAttackChain(chainData) {
                 bgGradientEnd = '#F8FAFC';
             }
             iconType = 'action';
+        } else if (nodeType === 'result' && metadata.beliefpath === true) {
+            typeLabel = plannerKind === 'fact' ? '事实' : '证据';
+            typeEn = plannerKind === 'fact' ? 'FACT' : 'EVIDENCE';
+            typeColor = '#134E4A';
+            accentColor = '#0D9488';
+            accentDark = '#0F766E';
+            bgGradientStart = '#FFFFFF';
+            bgGradientEnd = '#F0FDFA';
+            iconType = 'default';
         } else if (nodeType === 'vulnerability') {
             typeLabel = '漏洞';
             typeEn = 'VULNERABILITY';

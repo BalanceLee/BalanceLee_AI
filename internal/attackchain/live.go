@@ -1,6 +1,7 @@
 package attackchain
 
 import (
+	"balancelee-ai/beliefpath"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -18,16 +19,17 @@ import (
 // LiveChain is a deterministic graph projected from persisted tool events.
 // It does not invoke a model, so it can be refreshed while an agent is running.
 type LiveChain struct {
-	Nodes           []Node             `json:"nodes"`
-	Edges           []Edge             `json:"edges"`
-	Revision        string             `json:"revision"`
-	Mode            string             `json:"mode"`
-	Running         bool               `json:"running"`
-	Outcome         string             `json:"outcome"`
-	CriticalNodeIDs []string           `json:"critical_node_ids"`
-	CriticalEdgeIDs []string           `json:"critical_edge_ids"`
-	CriticalPaths   []LiveCriticalPath `json:"critical_paths"`
-	GeneratedAt     time.Time          `json:"generated_at"`
+	Nodes           []Node               `json:"nodes"`
+	Edges           []Edge               `json:"edges"`
+	Revision        string               `json:"revision"`
+	Mode            string               `json:"mode"`
+	Running         bool                 `json:"running"`
+	Outcome         string               `json:"outcome"`
+	CriticalNodeIDs []string             `json:"critical_node_ids"`
+	CriticalEdgeIDs []string             `json:"critical_edge_ids"`
+	CriticalPaths   []LiveCriticalPath   `json:"critical_paths"`
+	Planner         *beliefpath.Snapshot `json:"beliefpath,omitempty"`
+	GeneratedAt     time.Time            `json:"generated_at"`
 }
 
 type LiveCriticalPath struct {
@@ -36,6 +38,55 @@ type LiveCriticalPath struct {
 	Evidence string   `json:"evidence"`
 	NodeIDs  []string `json:"node_ids"`
 	EdgeIDs  []string `json:"edge_ids"`
+}
+
+// MergeBeliefPath overlays planner state on the deterministic execution graph.
+// Existing action nodes are reused by tool_call_id or execution_id so enabling
+// the planner does not duplicate the execution timeline.
+func MergeBeliefPath(chain *LiveChain, snapshot *beliefpath.Snapshot) {
+	if chain == nil || snapshot == nil || snapshot.Mode == beliefpath.ModeOff {
+		return
+	}
+	chain.Planner = snapshot
+	chain.Mode = "live+beliefpath"
+	chain.Revision = fmt.Sprintf("%s-bp-%d", chain.Revision, snapshot.Revision)
+	baseNodes := make([]beliefpath.ViewNode, 0, len(chain.Nodes))
+	for _, node := range chain.Nodes {
+		baseNodes = append(baseNodes, beliefpath.ViewNode{
+			ID:              node.ID,
+			Type:            node.Type,
+			Label:           node.Label,
+			ToolExecutionID: node.ToolExecutionID,
+			Metadata:        node.Metadata,
+			RiskScore:       node.RiskScore,
+		})
+	}
+	baseEdges := make([]beliefpath.ViewEdge, 0, len(chain.Edges))
+	for _, edge := range chain.Edges {
+		baseEdges = append(baseEdges, beliefpath.ViewEdge{
+			ID: edge.ID, Source: edge.Source, Target: edge.Target,
+			Type: edge.Type, Weight: edge.Weight,
+		})
+	}
+	projectedNodes, projectedEdges := beliefpath.OverlaySnapshot(baseNodes, baseEdges, snapshot)
+	chain.Nodes = make([]Node, 0, len(projectedNodes))
+	for _, node := range projectedNodes {
+		chain.Nodes = append(chain.Nodes, Node{
+			ID:              node.ID,
+			Type:            node.Type,
+			Label:           node.Label,
+			ToolExecutionID: node.ToolExecutionID,
+			Metadata:        node.Metadata,
+			RiskScore:       node.RiskScore,
+		})
+	}
+	chain.Edges = make([]Edge, 0, len(projectedEdges))
+	for _, edge := range projectedEdges {
+		chain.Edges = append(chain.Edges, Edge{
+			ID: edge.ID, Source: edge.Source, Target: edge.Target,
+			Type: edge.Type, Weight: edge.Weight,
+		})
+	}
 }
 
 type liveToolBatch struct {

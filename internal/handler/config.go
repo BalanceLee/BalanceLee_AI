@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"balancelee-ai/beliefpath"
 	"bytes"
 	"context"
 	"fmt"
@@ -91,11 +92,16 @@ type ConfigHandler struct {
 	logger                     *zap.Logger
 	mu                         sync.RWMutex
 	toolGuard                  *toolguard.Manager
+	beliefPath                 *beliefpath.Service
 	lastEmbeddingConfig        *config.EmbeddingConfig // 上一次的嵌入模型配置（用于检测变更）
 }
 
 func (h *ConfigHandler) SetDB(db *database.DB) {
 	h.db = db
+}
+
+func (h *ConfigHandler) SetBeliefPathService(service *beliefpath.Service) {
+	h.beliefPath = service
 }
 
 // AttackChainUpdater 攻击链处理器更新接口
@@ -232,6 +238,7 @@ type GetConfigResponse struct {
 	Robots     config.RobotsConfig      `json:"robots,omitempty"`
 	MultiAgent config.MultiAgentPublic  `json:"multi_agent,omitempty"`
 	C2         config.C2Public          `json:"c2"`
+	BeliefPath beliefpath.Config        `json:"beliefpath"`
 }
 
 // ToolConfigInfo 工具配置信息
@@ -342,6 +349,7 @@ func (h *ConfigHandler) GetConfig(c *gin.Context) {
 		C2:         h.config.C2.Public(),
 		Robots:     h.config.Robots,
 		MultiAgent: multiPub,
+		BeliefPath: h.config.BeliefPath.Effective(),
 	})
 }
 
@@ -686,6 +694,7 @@ type UpdateConfigRequest struct {
 	Robots     *config.RobotsConfig        `json:"robots,omitempty"`
 	MultiAgent *config.MultiAgentAPIUpdate `json:"multi_agent,omitempty"`
 	C2         *config.C2APIUpdate         `json:"c2,omitempty"`
+	BeliefPath *beliefpath.Config          `json:"beliefpath,omitempty"`
 }
 
 // AgentConfigUpdate 用于 PATCH /api/config 的 agent 段：仅 JSON 中出现的字段（指针非 nil）覆盖内存配置。
@@ -896,6 +905,20 @@ func (h *ConfigHandler) UpdateConfig(c *gin.Context) {
 		v := req.C2.Enabled
 		h.config.C2.Enabled = &v
 		h.logger.Info("更新C2配置", zap.Bool("enabled", v))
+	}
+	if req.BeliefPath != nil {
+		effective := req.BeliefPath.Effective()
+		if h.beliefPath != nil {
+			if err := h.beliefPath.UpdateConfig(effective); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "更新 BeliefPath 配置失败: " + err.Error()})
+				return
+			}
+		}
+		h.config.BeliefPath = effective
+		h.logger.Info("更新 BeliefPath 配置",
+			zap.Bool("enabled", effective.Enabled),
+			zap.String("mode", effective.Mode),
+			zap.String("variant", effective.Variant))
 	}
 
 	// 多代理标量（sub_agents 等仍由 config.yaml 维护）
@@ -1687,6 +1710,7 @@ func (h *ConfigHandler) saveConfig() error {
 	}
 
 	updateAgentConfig(root, h.config.Agent)
+	updateBeliefPathConfig(root, h.config.BeliefPath)
 	updateMCPConfig(root, h.config.MCP)
 	updateAIConfig(root, h.config.AI)
 	removeKeyFromMap(root.Content[0], "openai")
@@ -1807,6 +1831,30 @@ func updateAgentConfig(doc *yaml.Node, agent config.AgentConfig) {
 	setIntInMap(agentNode, "external_mcp_circuit_failure_threshold", agent.ExternalMCPCircuitFailureThreshold)
 	setIntInMap(agentNode, "external_mcp_circuit_cooldown_seconds", agent.ExternalMCPCircuitCooldownSeconds)
 	setStringInMap(agentNode, "system_prompt_path", agent.SystemPromptPath)
+}
+
+func updateBeliefPathConfig(doc *yaml.Node, cfg beliefpath.Config) {
+	cfg = cfg.Effective()
+	root := doc.Content[0]
+	node := ensureMap(root, "beliefpath")
+	setBoolInMap(node, "enabled", cfg.Enabled)
+	setStringInMap(node, "mode", cfg.Mode)
+	setStringInMap(node, "variant", cfg.Variant)
+	setIntInMap(node, "decision_timeout_ms", cfg.DecisionTimeoutMS)
+	setIntInMap(node, "top_k_tools", cfg.TopKTools)
+	setIntInMap(node, "max_intents", cfg.MaxIntents)
+	setIntInMap(node, "random_seed", int(cfg.RandomSeed))
+	setFloatInMap(node, "exploration", cfg.Exploration)
+	setFloatInMap(node, "information_gain_weight", cfg.InformationGainWeight)
+	setFloatInMap(node, "cost_weight", cfg.CostWeight)
+	setFloatInMap(node, "risk_weight", cfg.RiskWeight)
+	setFloatInMap(node, "repeat_weight", cfg.RepeatWeight)
+	setIntInMap(node, "min_evidence_attempts", cfg.MinEvidenceAttempts)
+	setFloatInMap(node, "soft_prune_margin", cfg.SoftPruneMargin)
+	setIntInMap(node, "repeat_limit", cfg.RepeatLimit)
+	setIntInMap(node, "cooldown_revisions", int(cfg.CooldownRevisions))
+	setIntInMap(node, "puct_simulations", cfg.PUCTSimulations)
+	setFloatInMap(node, "exploration_floor", cfg.ExplorationFloor)
 }
 
 func updateMCPConfig(doc *yaml.Node, cfg config.MCPConfig) {

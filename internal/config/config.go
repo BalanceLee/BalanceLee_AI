@@ -1,6 +1,7 @@
 package config
 
 import (
+	"balancelee-ai/beliefpath"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -48,6 +49,7 @@ type Config struct {
 	MultiAgent  MultiAgentConfig      `yaml:"multi_agent,omitempty" json:"multi_agent,omitempty"`
 	Project     ProjectConfig         `yaml:"project,omitempty" json:"project,omitempty"`
 	Vision      VisionConfig          `yaml:"vision,omitempty" json:"vision,omitempty"`
+	BeliefPath  beliefpath.Config     `yaml:"beliefpath,omitempty" json:"beliefpath,omitempty"`
 }
 
 type EnsureLocalConfigResult struct {

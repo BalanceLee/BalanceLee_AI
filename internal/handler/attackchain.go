@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"balancelee-ai/beliefpath"
 	"context"
 	"net/http"
 	"strings"
@@ -20,9 +21,14 @@ type AttackChainHandler struct {
 	db           *database.DB
 	logger       *zap.Logger
 	openAIConfig *config.OpenAIConfig
+	beliefPath   *beliefpath.Service
 	mu           sync.RWMutex // 保护 openAIConfig 的并发访问
 	// 用于防止同一对话的并发生成
 	generatingLocks sync.Map // map[string]*sync.Mutex
+}
+
+func (h *AttackChainHandler) SetBeliefPathService(service *beliefpath.Service) {
+	h.beliefPath = service
 }
 
 // NewAttackChainHandler 创建新的攻击链处理器
@@ -139,6 +145,15 @@ func (h *AttackChainHandler) GetLiveAttackChain(c *gin.Context) {
 		h.logger.Error("构建实时攻击图失败", zap.String("conversationId", conversationID), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "构建实时攻击图失败: " + err.Error()})
 		return
+	}
+	if h.beliefPath != nil && h.beliefPath.Active() {
+		if snapshot, snapshotErr := h.beliefPath.Snapshot(c.Request.Context(), conversationID); snapshotErr != nil {
+			h.logger.Warn("加载 BeliefPath 图快照失败",
+				zap.String("conversationId", conversationID),
+				zap.Error(snapshotErr))
+		} else {
+			attackchain.MergeBeliefPath(chain, snapshot)
+		}
 	}
 	c.JSON(http.StatusOK, chain)
 }

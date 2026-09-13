@@ -134,6 +134,7 @@ func (e *einoToolResultProgressEmitter) Emit(ctx context.Context, toolName, cont
 	}
 	if e.filesystemMonitorAgent != nil && e.mcpExecutionBinder != nil {
 		if execID := e.mcpExecutionBinder.ExecutionID(toolCallID); execID != "" {
+			data["executionId"] = execID
 			// Use the execution record rather than parsing the rendered result:
 			// reduction can rewrite text without changing the safety decision.
 			if e.filesystemMonitorAgent.MCPExecutionStatus(execID) == mcp.ToolExecutionStatusBlocked {
@@ -141,7 +142,6 @@ func (e *einoToolResultProgressEmitter) Emit(ctx context.Context, toolName, cont
 				data["status"] = mcp.ToolExecutionStatusBlocked
 				data["success"] = false
 				data["isError"] = true
-				data["executionId"] = execID
 			}
 			e.filesystemMonitorAgent.UpdateMCPExecutionDisplayResult(execID, content)
 		}

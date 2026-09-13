@@ -123,6 +123,26 @@ agent:
   # system_prompt_path: prompts/single-agent.md # 可选：单代理系统提示文件（相对本配置文件所在目录）；非空且可读时替换内置提示
 
   system_prompt_path: ""
+# BeliefPath 证据驱动在线规划。默认关闭；off 模式完全保持原 Agent 行为。
+beliefpath:
+  enabled: true
+  mode: enforce # off | shadow | advisory | enforce
+  variant: full # graph_only | pruning | router | puct | full
+  decision_timeout_ms: 150
+  top_k_tools: 5
+  max_intents: 6
+  random_seed: 42
+  exploration: 1.25
+  information_gain_weight: 0.3
+  cost_weight: 0.2
+  risk_weight: 0.3
+  repeat_weight: 0.5
+  min_evidence_attempts: 2
+  soft_prune_margin: 0.1
+  repeat_limit: 3
+  cooldown_revisions: 3
+  puct_simulations: 48
+  exploration_floor: 0.1
 # 调用拦截：在「安全防护 → 调用拦截」编辑并保存后立即生效；与 HITL 审批白名单独立。
 # 旧配置省略 tool_guard 时也默认启用政府域名保护。手动修改 YAML 后需重启。
 tool_guard:

@@ -1,6 +1,7 @@
 package multiagent
 
 import (
+	"balancelee-ai/beliefpath"
 	"context"
 	"errors"
 	"fmt"
@@ -172,6 +173,7 @@ func runEinoADKAgentLoop(ctx context.Context, args *einoADKRunLoopArgs, baseMsgs
 	progress := args.Progress
 	logger := args.Logger
 	runID := newEinoRunID()
+	ctx = beliefpath.WithRunID(ctx, runID)
 	progress = withEinoRunIDProgress(runID, progress)
 	args.Progress = progress
 	if logger != nil {

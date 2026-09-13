@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"balancelee-ai/beliefpath"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -201,6 +202,15 @@ type AgentHandler struct {
 	hitlDefaultReviewerSaver HitlDefaultReviewerSaver
 	auditLLM                 *openai.Client
 	audit                    *audit.Service
+	beliefPath               *beliefpath.Service
+}
+
+func (h *AgentHandler) SetBeliefPathService(service *beliefpath.Service) {
+	h.beliefPath = service
+}
+
+func (h *AgentHandler) withBeliefPath(ctx context.Context) context.Context {
+	return beliefpath.WithService(ctx, h.beliefPath)
 }
 
 // SetAudit wires platform audit logging.
@@ -891,6 +901,7 @@ func (h *AgentHandler) ProcessMessageForRobot(ctx context.Context, platform stri
 
 	// 注册运行中任务并向 taskEventBus 镜像进度事件，供 Web 端 task-events 补流。
 	taskCtx, cancelWithCause := context.WithCancelCause(ctx)
+	taskCtx = h.withBeliefPath(taskCtx)
 	defer cancelWithCause(nil)
 	taskStatus := "completed"
 	defer func() {
@@ -1562,6 +1573,21 @@ func (h *AgentHandler) createProgressCallback(runCtx context.Context, cancelRun 
 			processDetailID, err := h.db.AddProcessDetailWithID(assistantMessageID, conversationID, eventType, message, data)
 			if err != nil {
 				h.logger.Warn("保存过程详情失败", zap.Error(err), zap.String("eventType", eventType))
+			} else if h.beliefPath != nil {
+				if observeErr := h.beliefPath.Observe(runCtx, beliefpath.Event{
+					ConversationID: conversationID,
+					MessageID:      assistantMessageID,
+					SourceEventID:  processDetailID,
+					EventType:      eventType,
+					Message:        message,
+					Data:           data,
+					CreatedAt:      time.Now(),
+				}); observeErr != nil {
+					h.logger.Warn("BeliefPath 处理过程事件失败",
+						zap.Error(observeErr),
+						zap.String("eventType", eventType),
+						zap.String("conversationId", conversationID))
+				}
 			}
 			if deferToolProgressSend {
 				clientData := enrichProgressEventData(summarizeProcessDetailData(eventType, data), conversationID, assistantMessageID)

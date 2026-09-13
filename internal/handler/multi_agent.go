@@ -239,6 +239,7 @@ func (h *AgentHandler) MultiAgentLoopStream(c *gin.Context) {
 			rawProgressCallback(eventType, message, data)
 		}
 		taskCtxLoop := mcp.WithMCPConversationID(taskCtx, conversationID)
+		taskCtxLoop = h.withBeliefPath(taskCtxLoop)
 		taskCtxLoop = mcp.WithToolRunRegistry(taskCtxLoop, h.tasks)
 		taskCtxLoop = mcp.WithEinoExecuteRunRegistry(taskCtxLoop, h.tasks)
 		taskCtxLoop = multiagent.WithAgentRuntimeCancelRegistrar(taskCtxLoop, func(cancel func(error) bool) func() {

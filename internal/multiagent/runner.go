@@ -2,6 +2,7 @@
 package multiagent
 
 import (
+	"balancelee-ai/beliefpath"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -82,6 +83,18 @@ func RunDeepAgent(
 ) (*RunResult, error) {
 	if appCfg == nil || ma == nil || ag == nil {
 		return nil, fmt.Errorf("multiagent: 配置或 Agent 为空")
+	}
+	planner := beliefpath.FromContext(ctx)
+	if planner == nil && db != nil {
+		var plannerErr error
+		planner, plannerErr = beliefpath.NewService(db.DB, appCfg.BeliefPath, logger)
+		if plannerErr != nil {
+			return nil, fmt.Errorf("multiagent BeliefPath: %w", plannerErr)
+		}
+	}
+	runtimeMiddleware := ma.EinoMiddleware
+	if planner != nil && planner.Enforces() {
+		runtimeMiddleware.ToolSearchEnable = false
 	}
 
 	runtimeUserMessage := prepareLatestUserMessageForModel(userMessage, appCfg, &ma.EinoMiddleware, conversationID, logger)
@@ -215,7 +228,7 @@ func RunDeepAgent(
 				return nil, fmt.Errorf("子代理 %q 工具: %w", id, err)
 			}
 
-			subToolsForCfg, subPre, subToolSearchActive, err := prependEinoAgenticMiddlewares(ctx, &ma.EinoMiddleware, einoMWSub, subTools, agenticLoc, agenticSkillsRoot, conversationID, projectID, logger)
+			subToolsForCfg, subPre, subToolSearchActive, err := prependEinoAgenticMiddlewares(ctx, &runtimeMiddleware, einoMWSub, subTools, agenticLoc, agenticSkillsRoot, conversationID, projectID, logger)
 			if err != nil {
 				return nil, fmt.Errorf("子代理 %q eino 中间件: %w", id, err)
 			}
@@ -241,6 +254,13 @@ func RunDeepAgent(
 				}
 				subHandlers = append(subHandlers, agenticSkillMW)
 			}
+			if plannerMiddleware, plannerErr := beliefpath.NewAgenticPlannerMiddleware(
+				ctx, planner, conversationID, id, "", subTools, progress, logger,
+			); plannerErr != nil {
+				return nil, fmt.Errorf("子代理 %q BeliefPath middleware: %w", id, plannerErr)
+			} else if plannerMiddleware != nil {
+				subHandlers = append(subHandlers, plannerMiddleware)
+			}
 			subHandlers = appendEinoAgenticChatModelTailMiddlewares(subHandlers, einoChatModelTailConfig{
 				logger:               logger,
 				phase:                "sub_agent:" + id,
@@ -249,7 +269,7 @@ func RunDeepAgent(
 				maxTotalTokens:       appCfg.OpenAI.MaxTotalTokens,
 				toolMaxBytes:         toolMaxBytesFromMW(&ma.EinoMiddleware),
 				conversationID:       conversationID,
-				middlewareConfig:     &ma.EinoMiddleware,
+				middlewareConfig:     &runtimeMiddleware,
 			})
 
 			subInstrFinal := project.AppendVisionImageAnalysisIfReady(instr, appCfg.Vision.Ready())
@@ -265,6 +285,18 @@ func RunDeepAgent(
 					zap.Bool("tool_search_middleware", subToolSearchActive),
 				)
 			}
+			subToolCallMiddlewares := []compose.ToolMiddleware{
+				modelOutputExecutionGuardMiddleware(),
+				localToolRBACMiddleware(),
+			}
+			if planner != nil && planner.Active() {
+				subToolCallMiddlewares = append(subToolCallMiddlewares,
+					beliefpath.NewToolGateMiddleware(planner, conversationID, id, progress))
+			}
+			subToolCallMiddlewares = append(subToolCallMiddlewares,
+				hitlToolCallMiddleware(),
+				softRecoveryToolMiddleware(),
+			)
 			sa, err := newEinoAgenticChatModelAgent(ctx, einoAgenticChatModelAgentConfig{
 				Name:          id,
 				Description:   desc,
@@ -275,12 +307,7 @@ func RunDeepAgent(
 					ToolsNodeConfig: compose.ToolsNodeConfig{
 						Tools:               subToolsForCfg,
 						UnknownToolsHandler: einomcp.UnknownToolReminderHandler(),
-						ToolCallMiddlewares: []compose.ToolMiddleware{
-							modelOutputExecutionGuardMiddleware(),
-							localToolRBACMiddleware(),
-							hitlToolCallMiddleware(),
-							softRecoveryToolMiddleware(),
-						},
+						ToolCallMiddlewares: subToolCallMiddlewares,
 					},
 					EmitInternalEvents: true,
 				},
@@ -328,9 +355,16 @@ func RunDeepAgent(
 	var mainToolsForCfg []tool.BaseTool
 	var mainToolSearchActive bool
 	var mainAgenticOrchestratorPre []adk.TypedChatModelAgentMiddleware[*schema.AgenticMessage]
-	mainToolsForCfg, mainAgenticOrchestratorPre, mainToolSearchActive, err = prependEinoAgenticMiddlewares(ctx, &ma.EinoMiddleware, einoMWMain, mainTools, agenticLoc, agenticSkillsRoot, conversationID, projectID, logger)
+	mainToolsForCfg, mainAgenticOrchestratorPre, mainToolSearchActive, err = prependEinoAgenticMiddlewares(ctx, &runtimeMiddleware, einoMWMain, mainTools, agenticLoc, agenticSkillsRoot, conversationID, projectID, logger)
 	if err != nil {
 		return nil, err
+	}
+	if plannerMiddleware, plannerErr := beliefpath.NewAgenticPlannerMiddleware(
+		ctx, planner, conversationID, orchestratorName, userMessage, mainTools, progress, logger,
+	); plannerErr != nil {
+		return nil, fmt.Errorf("主代理 BeliefPath middleware: %w", plannerErr)
+	} else if plannerMiddleware != nil {
+		mainAgenticOrchestratorPre = append(mainAgenticOrchestratorPre, plannerMiddleware)
 	}
 
 	orchInstruction = project.AppendSystemPromptBlock(orchInstruction, systemPromptExtra)
@@ -429,7 +463,7 @@ func RunDeepAgent(
 		toolMaxBytes:         toolMaxBytesFromMW(&ma.EinoMiddleware),
 		conversationID:       conversationID,
 		trace:                modelFacingTrace,
-		middlewareConfig:     &ma.EinoMiddleware,
+		middlewareConfig:     &runtimeMiddleware,
 	})
 
 	supHandlers := []adk.TypedChatModelAgentMiddleware[*schema.AgenticMessage]{}
@@ -448,19 +482,26 @@ func RunDeepAgent(
 		toolMaxBytes:         toolMaxBytesFromMW(&ma.EinoMiddleware),
 		conversationID:       conversationID,
 		trace:                modelFacingTrace,
-		middlewareConfig:     &ma.EinoMiddleware,
+		middlewareConfig:     &runtimeMiddleware,
 	})
 
+	mainToolCallMiddlewares := []compose.ToolMiddleware{
+		modelOutputExecutionGuardMiddleware(),
+		localToolRBACMiddleware(),
+	}
+	if planner != nil && planner.Active() {
+		mainToolCallMiddlewares = append(mainToolCallMiddlewares,
+			beliefpath.NewToolGateMiddleware(planner, conversationID, orchestratorName, progress))
+	}
+	mainToolCallMiddlewares = append(mainToolCallMiddlewares,
+		hitlToolCallMiddleware(),
+		softRecoveryToolMiddleware(),
+	)
 	mainToolsCfg := adk.ToolsConfig{
 		ToolsNodeConfig: compose.ToolsNodeConfig{
 			Tools:               mainToolsForCfg,
 			UnknownToolsHandler: einomcp.UnknownToolReminderHandler(),
-			ToolCallMiddlewares: []compose.ToolMiddleware{
-				modelOutputExecutionGuardMiddleware(),
-				localToolRBACMiddleware(),
-				hitlToolCallMiddleware(),
-				softRecoveryToolMiddleware(),
-			},
+			ToolCallMiddlewares: mainToolCallMiddlewares,
 		},
 		EmitInternalEvents: true,
 	}

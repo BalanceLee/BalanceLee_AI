@@ -2935,6 +2935,9 @@ const LIVE_ATTACK_CHAIN_REFRESH_EVENTS = new Set([
     'tool_calls_detected',
     'tool_call',
     'tool_result',
+    'beliefpath_decision',
+    'beliefpath_gate_allowed',
+    'beliefpath_gate_blocked',
     'knowledge_retrieval',
     'response_start',
     'response',
@@ -3396,6 +3399,29 @@ function handleStreamEvent(event, progressElement, progressId,
         case 'tool_calls_detected':
             // 助手正文段结束、进入工具调用：下一段 response_start 应新建时间线条目
             responseStreamStateByProgressId.delete(progressId);
+            break;
+
+        case 'beliefpath_decision': {
+            const plannerData = event.data || {};
+            addTimelineItem(timeline, 'planning', {
+                title: 'BeliefPath · ' + String(plannerData.intent || '路径决策'),
+                message: event.message,
+                data: plannerData,
+                expanded: false
+            });
+            break;
+        }
+
+        case 'beliefpath_gate_blocked':
+            addTimelineItem(timeline, 'warning', {
+                title: 'BeliefPath · 重新规划',
+                message: event.message,
+                data: event.data,
+                expanded: true
+            });
+            break;
+
+        case 'beliefpath_gate_allowed':
             break;
 
         case 'warning':

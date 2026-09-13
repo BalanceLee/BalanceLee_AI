@@ -175,6 +175,16 @@ function refreshSettingsCustomSelects() {
     settingsCustomSelects.forEach((_reg, select) => syncSettingsCustomSelect(select));
 }
 
+function syncBeliefPathSettingsControls() {
+    const enabled = document.getElementById('beliefpath-enabled')?.checked === true;
+    ['beliefpath-mode', 'beliefpath-variant'].forEach((id) => {
+        const select = document.getElementById(id);
+        if (!select) return;
+        select.disabled = !enabled;
+        syncSettingsCustomSelect(select);
+    });
+}
+
 function enhanceSettingsSelect(select) {
     if (!shouldEnhanceSettingsSelect(select)) {
         if (select && select.dataset.settingsCustomSelect === '1') {
@@ -826,6 +836,27 @@ async function loadConfig(loadTools = true, options = {}) {
             const v = currentConfig.agent[key];
             el.value = (v !== undefined && v !== null && !Number.isNaN(Number(v))) ? String(Number(v)) : fallback;
         });
+
+        const beliefPath = currentConfig.beliefpath || {};
+        const beliefPathEnabled = document.getElementById('beliefpath-enabled');
+        const beliefPathMode = document.getElementById('beliefpath-mode');
+        const beliefPathVariant = document.getElementById('beliefpath-variant');
+        if (beliefPathEnabled) {
+            beliefPathEnabled.checked = beliefPath.enabled === true;
+            if (!beliefPathEnabled.dataset.modeBound) {
+                beliefPathEnabled.dataset.modeBound = '1';
+                beliefPathEnabled.addEventListener('change', syncBeliefPathSettingsControls);
+            }
+        }
+        if (beliefPathMode) {
+            const mode = String(beliefPath.mode || 'shadow').toLowerCase();
+            beliefPathMode.value = ['shadow', 'advisory', 'enforce'].includes(mode) ? mode : 'shadow';
+        }
+        if (beliefPathVariant) {
+            const variant = String(beliefPath.variant || 'full').toLowerCase();
+            beliefPathVariant.value = ['graph_only', 'pruning', 'router', 'puct', 'full'].includes(variant) ? variant : 'full';
+        }
+        syncBeliefPathSettingsControls();
 
         const ma = currentConfig.multi_agent || {};
         const maEn = document.getElementById('multi-agent-enabled');
@@ -2030,6 +2061,14 @@ async function applySettings() {
                 external_mcp_max_concurrent_total: parseInt(document.getElementById('agent-external-mcp-concurrency-total')?.value || '16', 10) || 0,
                 external_mcp_circuit_failure_threshold: parseInt(document.getElementById('agent-external-mcp-circuit-threshold')?.value || '3', 10) || 0,
                 external_mcp_circuit_cooldown_seconds: Math.max(0, parseInt(document.getElementById('agent-external-mcp-circuit-cooldown')?.value || '60', 10) || 0)
+            },
+            beliefpath: {
+                ...(currentConfig?.beliefpath || {}),
+                enabled: document.getElementById('beliefpath-enabled')?.checked === true,
+                mode: document.getElementById('beliefpath-enabled')?.checked === true
+                    ? (document.getElementById('beliefpath-mode')?.value || 'shadow')
+                    : 'off',
+                variant: document.getElementById('beliefpath-variant')?.value || 'full'
             },
             multi_agent: (function () {
                 const peRaw = document.getElementById('multi-agent-pe-loop')?.value;

@@ -1,6 +1,7 @@
 package multiagent
 
 import (
+	"balancelee-ai/beliefpath"
 	"context"
 	"fmt"
 	"sync"
@@ -45,6 +46,14 @@ func RunEinoSingleChatModelAgent(
 	if ma == nil {
 		return nil, fmt.Errorf("eino single: multi_agent 配置为空")
 	}
+	planner := beliefpath.FromContext(ctx)
+	if planner == nil && db != nil {
+		var plannerErr error
+		planner, plannerErr = beliefpath.NewService(db.DB, appCfg.BeliefPath, logger)
+		if plannerErr != nil {
+			return nil, fmt.Errorf("eino single BeliefPath: %w", plannerErr)
+		}
+	}
 	runtimeUserMessage := prepareLatestUserMessageForModel(userMessage, appCfg, &ma.EinoMiddleware, conversationID, logger)
 
 	einoLoc, einoSkillMW, einoFSTools, skillsRoot, einoErr := prepareEinoAgenticSkills(ctx, appCfg.SkillsDir, ma, logger)
@@ -84,7 +93,11 @@ func RunEinoSingleChatModelAgent(
 		return nil, err
 	}
 
-	mainToolsForCfg, mainOrchestratorPre, singleToolSearchActive, err := prependEinoAgenticMiddlewares(ctx, &ma.EinoMiddleware, einoMWMain, mainTools, einoLoc, skillsRoot, conversationID, projectID, logger)
+	runtimeMiddleware := ma.EinoMiddleware
+	if planner != nil && planner.Enforces() {
+		runtimeMiddleware.ToolSearchEnable = false
+	}
+	mainToolsForCfg, mainOrchestratorPre, singleToolSearchActive, err := prependEinoAgenticMiddlewares(ctx, &runtimeMiddleware, einoMWMain, mainTools, einoLoc, skillsRoot, conversationID, projectID, logger)
 	if err != nil {
 		return nil, fmt.Errorf("eino single eino 中间件: %w", err)
 	}
@@ -128,6 +141,13 @@ func RunEinoSingleChatModelAgent(
 		}
 		handlers = append(handlers, einoSkillMW)
 	}
+	if plannerMiddleware, plannerErr := beliefpath.NewAgenticPlannerMiddleware(
+		ctx, planner, conversationID, einoSingleAgentName, userMessage, mainTools, progress, logger,
+	); plannerErr != nil {
+		return nil, fmt.Errorf("eino single BeliefPath middleware: %w", plannerErr)
+	} else if plannerMiddleware != nil {
+		handlers = append(handlers, plannerMiddleware)
+	}
 	handlers = appendEinoAgenticChatModelTailMiddlewares(handlers, einoChatModelTailConfig{
 		logger:               logger,
 		phase:                "eino_single",
@@ -137,21 +157,28 @@ func RunEinoSingleChatModelAgent(
 		toolMaxBytes:         toolMaxBytesFromMW(&ma.EinoMiddleware),
 		conversationID:       conversationID,
 		trace:                modelFacingTrace,
-		middlewareConfig:     &ma.EinoMiddleware,
+		middlewareConfig:     &runtimeMiddleware,
 	})
 
 	maxIter := agentMaxIterations(appCfg)
 
+	toolCallMiddlewares := []compose.ToolMiddleware{
+		modelOutputExecutionGuardMiddleware(),
+		localToolRBACMiddleware(),
+	}
+	if planner != nil && planner.Active() {
+		toolCallMiddlewares = append(toolCallMiddlewares,
+			beliefpath.NewToolGateMiddleware(planner, conversationID, einoSingleAgentName, progress))
+	}
+	toolCallMiddlewares = append(toolCallMiddlewares,
+		hitlToolCallMiddleware(),
+		softRecoveryToolMiddleware(),
+	)
 	mainToolsCfg := adk.ToolsConfig{
 		ToolsNodeConfig: compose.ToolsNodeConfig{
 			Tools:               mainToolsForCfg,
 			UnknownToolsHandler: einomcp.UnknownToolReminderHandler(),
-			ToolCallMiddlewares: []compose.ToolMiddleware{
-				modelOutputExecutionGuardMiddleware(),
-				localToolRBACMiddleware(),
-				hitlToolCallMiddleware(),
-				softRecoveryToolMiddleware(),
-			},
+			ToolCallMiddlewares: toolCallMiddlewares,
 		},
 		EmitInternalEvents: true,
 	}
@@ -229,7 +256,7 @@ func RunEinoSingleChatModelAgent(
 		MaxTotalTokens:          appCfg.OpenAI.MaxTotalTokens,
 		ToolMaxBytes:            toolMaxBytesFromMW(&ma.EinoMiddleware),
 		ModelName:               appCfg.OpenAI.Model,
-		MiddlewareConfig:        &ma.EinoMiddleware,
+		MiddlewareConfig:        &runtimeMiddleware,
 		EmptyResponseMessage: "(Eino ADK single-agent session completed but no assistant text was captured. Check process details or logs.) " +
 			"（Eino ADK 单代理会话已完成，但未捕获到助手文本输出。请查看过程详情或日志。）",
 	}, baseMsgs)

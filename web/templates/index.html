@@ -3842,6 +3842,31 @@
                                             <small class="form-hint" data-i18n="settingsBasic.enableMultiAgentHint">开启后对话页可选「多代理」模式；子代理在 config.yaml 的 multi_agent.sub_agents 或 agents 目录中配置。</small>
                                         </div>
                                         <div class="form-group">
+                                            <label class="checkbox-label">
+                                                <input type="checkbox" id="beliefpath-enabled" class="modern-checkbox" />
+                                                <span class="checkbox-custom"></span>
+                                                <span class="checkbox-text" data-i18n="settingsBasic.beliefPathEnabled">启用 BeliefPath 在线规划</span>
+                                            </label>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="beliefpath-mode" data-i18n="settingsBasic.beliefPathMode">BeliefPath 运行模式</label>
+                                            <select id="beliefpath-mode">
+                                                <option value="shadow" data-i18n="settingsBasic.beliefPathModeShadow">影子对照</option>
+                                                <option value="advisory" data-i18n="settingsBasic.beliefPathModeAdvisory">建议模式</option>
+                                                <option value="enforce" data-i18n="settingsBasic.beliefPathModeEnforce">强制规划</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="beliefpath-variant" data-i18n="settingsBasic.beliefPathVariant">BeliefPath 实验变体</label>
+                                            <select id="beliefpath-variant">
+                                                <option value="graph_only" data-i18n="settingsBasic.beliefPathVariantGraph">仅信念图</option>
+                                                <option value="pruning" data-i18n="settingsBasic.beliefPathVariantPruning">图与剪枝</option>
+                                                <option value="router" data-i18n="settingsBasic.beliefPathVariantRouter">剪枝与工具路由</option>
+                                                <option value="puct" data-i18n="settingsBasic.beliefPathVariantPUCT">剪枝与 PUCT</option>
+                                                <option value="full" data-i18n="settingsBasic.beliefPathVariantFull">完整机制</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
                                             <label for="multi-agent-pe-loop" data-i18n="settingsBasic.multiAgentPeLoop">plan_execute 外层循环上限</label>
                                             <input type="number" id="multi-agent-pe-loop" min="0" step="1" value="0" data-i18n="settingsBasic.multiAgentPeLoopPlaceholder" data-i18n-attr="placeholder" placeholder="0 表示 Eino 默认 10" />
                                             <small class="form-hint" data-i18n="settingsBasic.multiAgentPeLoopHint">仅 orchestration=plan_execute 时有效；execute 与 replan 之间的最大轮次。</small>
@@ -5671,12 +5696,12 @@
     <script src="/static/js/agents.js"></script>
     <script src="/static/js/dashboard.js"></script>
     <script src="/static/js/chat-scroll.js?v=20260815-1"></script>
-    <script src="/static/js/monitor.js?v=20260907-blocked-1-attack-path-1"></script>
-    <script src="/static/js/chat.js?v=20260907-blocked-1-attack-path-1"></script>
+    <script src="/static/js/monitor.js?v=20260913-beliefpath-1"></script>
+    <script src="/static/js/chat.js?v=20260913-beliefpath-1"></script>
     <script src="/static/js/chat-plan-progress.js?v=20260815-1"></script>
     <script src="/static/js/hitl.js?v=20260819-1"></script>
     <script src="/static/js/tool-guard.js?v=20260907-7"></script>
-    <script src="/static/js/settings.js?v=20260717-1"></script>
+    <script src="/static/js/settings.js?v=20260913-beliefpath-2"></script>
     <script src="/static/vendor/xterm.js"></script>
     <script src="/static/vendor/xterm-addon-fit.js"></script>
     <script src="/static/js/terminal.js"></script>

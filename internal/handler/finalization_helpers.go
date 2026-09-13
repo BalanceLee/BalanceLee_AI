@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"balancelee-ai/beliefpath"
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -87,6 +89,7 @@ func (h *AgentHandler) persistFinalizationDecision(
 		return
 	}
 	_ = h.db.AddProcessDetail(assistantMessageID, conversationID, "finalization_check", finalizationCheckMessage(decision), decision)
+	h.observeBeliefPathFinalization(conversationID, decision)
 	if decision.Finalizable {
 		if err := h.db.UpdateAssistantMessageFinalize(assistantMessageID, decision.FinalText, mcpExecutionIDs, reasoningContent); err != nil && h.logger != nil {
 			h.logger.Warn("更新最终助手消息失败", zap.Error(err), zap.String("conversationId", conversationID), zap.String("agentMode", agentMode))
@@ -131,6 +134,7 @@ func (h *AgentHandler) finalizeCandidateForDeliveryWithPolicy(
 		return decision
 	}
 	_ = h.db.AddProcessDetail(assistantMessageID, conversationID, "finalization_check", finalizationCheckMessage(decision), decision)
+	h.observeBeliefPathFinalization(conversationID, decision)
 	if decision.Finalizable {
 		if err := h.db.UpdateAssistantMessageFinalize(assistantMessageID, decision.FinalText, mcpExecutionIDs, reasoningContent); err != nil && h.logger != nil {
 			h.logger.Warn("更新最终助手消息失败", zap.Error(err), zap.String("conversationId", conversationID), zap.String("agentMode", agentMode))
@@ -139,6 +143,26 @@ func (h *AgentHandler) finalizeCandidateForDeliveryWithPolicy(
 	}
 	_, _ = h.db.Exec("UPDATE messages SET content = ?, updated_at = ? WHERE id = ?", finalizationBlockedMessage(decision), time.Now(), assistantMessageID)
 	return decision
+}
+
+func (h *AgentHandler) observeBeliefPathFinalization(
+	conversationID string,
+	decision agentfinalizer.Decision,
+) {
+	if h == nil || h.beliefPath == nil {
+		return
+	}
+	if err := h.beliefPath.Finalize(context.Background(), beliefpath.TerminalEvidence{
+		ConversationID: conversationID,
+		Status:         decision.Status,
+		Verified:       decision.Finalizable && decision.EvidenceVerified,
+		EvidenceRefs:   append([]string(nil), decision.EvidenceRefs...),
+		FinalText:      decision.FinalText,
+	}); err != nil && h.logger != nil {
+		h.logger.Warn("BeliefPath 处理终态证据失败",
+			zap.Error(err),
+			zap.String("conversationId", conversationID))
+	}
 }
 
 func finalizationCheckMessage(d agentfinalizer.Decision) string {

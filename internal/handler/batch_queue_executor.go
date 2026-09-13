@@ -222,6 +222,7 @@ func (h *AgentHandler) executeOneBatchSubTask(queueID string, queue *BatchTaskQu
 
 	progressCallback := h.createProgressCallback(taskCtx, cancelWithCause, conversationID, assistantMessageID, sendEvent)
 	taskCtx = mcp.WithMCPConversationID(taskCtx, conversationID)
+	taskCtx = h.withBeliefPath(taskCtx)
 	taskCtx = mcp.WithToolRunRegistry(taskCtx, h.tasks)
 	taskCtx = mcp.WithEinoExecuteRunRegistry(taskCtx, h.tasks)
 

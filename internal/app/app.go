@@ -1,6 +1,7 @@
 package app
 
 import (
+	"balancelee-ai/beliefpath"
 	"context"
 	"crypto/subtle"
 	"crypto/tls"
@@ -59,6 +60,7 @@ type App struct {
 	c2Watchdog         *c2.SessionWatchdog       // C2 会话看门狗
 	c2WatchdogCancel   context.CancelFunc        // 看门狗取消函数
 	c2Handler          *handler.C2Handler        // C2 REST（与 Manager 生命周期同步）
+	beliefPath         *beliefpath.Service       // 可选的证据驱动在线规划器
 }
 
 // New 创建新应用
@@ -91,6 +93,11 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 	db, err := database.NewDB(dbPath, log.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("初始化数据库失败: %w", err)
+	}
+	beliefPathService, err := beliefpath.NewService(db.DB, cfg.BeliefPath, log.Logger)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("初始化 BeliefPath: %w", err)
 	}
 
 	// 认证管理器（数据库初始化后挂载 RBAC）
@@ -359,6 +366,7 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 
 	// 创建处理器
 	agentHandler := handler.NewAgentHandler(agent, db, cfg, log.Logger)
+	agentHandler.SetBeliefPathService(beliefPathService)
 	agentHandler.SetAgentsMarkdownDir(agentsDir)
 	// 如果知识库已启用，设置知识库管理器到AgentHandler以便记录检索日志
 	if knowledgeManager != nil {
@@ -372,6 +380,7 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 	notificationHandler := handler.NewNotificationHandler(db, agentHandler, log.Logger)
 	authHandler := handler.NewAuthHandler(authManager, cfg, configPath, log.Logger)
 	attackChainHandler := handler.NewAttackChainHandler(db, &cfg.OpenAI, log.Logger)
+	attackChainHandler.SetBeliefPathService(beliefPathService)
 	vulnerabilityHandler := handler.NewVulnerabilityHandler(db, log.Logger)
 	assetHandler := handler.NewAssetHandler(db, log.Logger)
 	projectHandler := handler.NewProjectHandler(db, log.Logger)
@@ -383,6 +392,7 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 	registerWebshellManagementTools(mcpServer, db, webshellHandler, log.Logger)
 	configHandler := handler.NewConfigHandler(configPath, cfg, mcpServer, executor, agent, attackChainHandler, externalMCPMgr, log.Logger)
 	configHandler.SetDB(db)
+	configHandler.SetBeliefPathService(beliefPathService)
 	configHandler.SetToolGuard(toolGuard)
 	agentHandler.SetHitlToolWhitelistSaver(configHandler)
 	agentHandler.SetHitlAuditStrategySaver(configHandler)
@@ -430,6 +440,7 @@ func New(cfg *config.Config, log *logger.Logger, configPath string) (*App, error
 		c2Watchdog:         c2Watchdog,
 		c2WatchdogCancel:   watchdogCancel,
 		c2Handler:          c2Handler,
+		beliefPath:         beliefPathService,
 	}
 
 	// 设置漏洞工具注册器（内置工具，必须设置）
@@ -877,6 +888,7 @@ func setupRoutes(
 		protected.GET("/attack-chain/:conversationId", attackChainHandler.GetAttackChain)
 		protected.GET("/attack-chain/:conversationId/live", attackChainHandler.GetLiveAttackChain)
 		protected.POST("/attack-chain/:conversationId/regenerate", attackChainHandler.RegenerateAttackChain)
+		beliefpath.RegisterRoutes(protected, app.beliefPath)
 
 		// 知识库管理（始终注册路由，通过 App 实例动态获取 handler）
 		knowledgeRoutes := protected.Group("/knowledge")
